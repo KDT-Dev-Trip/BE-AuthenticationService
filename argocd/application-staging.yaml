@@ -1,0 +1,77 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: be-authentication-service-staging
+  namespace: argocd
+  labels:
+    app: authentication-service
+    environment: staging
+    team: devops-platform
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: devops-alerts
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: devops-alerts
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: devops-alerts
+spec:
+  project: devops-platform
+  
+  # 소스 저장소 설정
+  source:
+    repoURL: https://github.com/your-org/BE-AuthenticationService.git
+    targetRevision: develop
+    path: k8s/overlays/staging
+    
+    # Kustomize 설정
+    kustomize:
+      images:
+        - authentication-service=localhost:5000/authentication-service:latest
+      patchesStrategicMerge:
+        - |-
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: authentication-service
+          spec:
+            template:
+              metadata:
+                annotations:
+                  prometheus.io/scrape: "true"
+                  prometheus.io/port: "8080"
+                  prometheus.io/path: "/actuator/prometheus"
+  
+  # 대상 클러스터 설정
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: devops-platform-staging
+    
+  # 동기화 정책
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+        
+  # 무시할 차이점 설정
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data
+        
+  # 헬스체크 설정
+  revisionHistoryLimit: 10

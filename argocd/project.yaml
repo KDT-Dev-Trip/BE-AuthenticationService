@@ -1,0 +1,127 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: devops-platform
+  namespace: argocd
+  labels:
+    team: devops-platform
+spec:
+  description: DevOps Platform Authentication Service Project
+  
+  # 소스 저장소 허용 목록
+  sourceRepos:
+    - 'https://github.com/your-org/BE-AuthenticationService.git'
+    - 'https://charts.bitnami.com/bitnami'
+    - 'https://kubernetes-sigs.github.io/metrics-server/'
+    - 'https://prometheus-community.github.io/helm-charts'
+    
+  # 배포 대상 클러스터 및 네임스페이스
+  destinations:
+    - namespace: 'devops-platform-*'
+      server: 'https://kubernetes.default.svc'
+    - namespace: 'monitoring'
+      server: 'https://kubernetes.default.svc'
+    - namespace: 'ingress-nginx'
+      server: 'https://kubernetes.default.svc'
+      
+  # 클러스터 리소스 허용
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRole
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRoleBinding
+    - group: 'networking.k8s.io'
+      kind: IngressClass
+    - group: 'apiextensions.k8s.io'
+      kind: CustomResourceDefinition
+      
+  # 네임스페이스 리소스 허용
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: Service
+    - group: ''
+      kind: ServiceAccount
+    - group: ''
+      kind: Secret
+    - group: ''
+      kind: ConfigMap
+    - group: ''
+      kind: PersistentVolumeClaim
+    - group: 'apps'
+      kind: Deployment
+    - group: 'apps'
+      kind: StatefulSet
+    - group: 'apps'
+      kind: DaemonSet
+    - group: 'batch'
+      kind: Job
+    - group: 'batch'
+      kind: CronJob
+    - group: 'networking.k8s.io'
+      kind: Ingress
+    - group: 'networking.k8s.io'
+      kind: NetworkPolicy
+    - group: 'policy'
+      kind: PodDisruptionBudget
+    - group: 'autoscaling'
+      kind: HorizontalPodAutoscaler
+    - group: 'monitoring.coreos.com'
+      kind: ServiceMonitor
+    - group: 'monitoring.coreos.com'
+      kind: PrometheusRule
+      
+  # 거부된 리소스
+  namespaceResourceBlacklist:
+    - group: ''
+      kind: ResourceQuota
+    - group: ''
+      kind: LimitRange
+      
+  # 역할 설정
+  roles:
+    - name: devops-admin
+      description: DevOps Admin with full access
+      policies:
+        - p, proj:devops-platform:devops-admin, applications, *, devops-platform/*, allow
+        - p, proj:devops-platform:devops-admin, repositories, *, *, allow
+        - p, proj:devops-platform:devops-admin, clusters, *, *, allow
+      groups:
+        - devops-platform:admin
+        
+    - name: developer
+      description: Developer with limited access
+      policies:
+        - p, proj:devops-platform:developer, applications, get, devops-platform/*, allow
+        - p, proj:devops-platform:developer, applications, sync, devops-platform/*-staging, allow
+        - p, proj:devops-platform:developer, repositories, get, *, allow
+      groups:
+        - devops-platform:developer
+        
+    - name: viewer
+      description: Read-only access
+      policies:
+        - p, proj:devops-platform:viewer, applications, get, devops-platform/*, allow
+        - p, proj:devops-platform:viewer, repositories, get, *, allow
+      groups:
+        - devops-platform:viewer
+        
+  # 동기화 정책
+  syncWindows:
+    - kind: allow
+      schedule: '0 2 * * *'  # 매일 오전 2시
+      duration: 4h
+      applications:
+        - '*-staging'
+      manualSync: true
+    - kind: deny
+      schedule: '0 18 * * 5'  # 금요일 오후 6시
+      duration: 60h
+      applications:
+        - '*-production'
+      manualSync: false
+      
+  # 서명 키 설정
+  signatureKeys:
+    - keyID: ABCDEF1234567890

@@ -1,0 +1,153 @@
+version: '3.8'
+
+services:
+  # 테스트용 MySQL 데이터베이스
+  mysql-test:
+    image: mysql:8.0
+    container_name: mysql-test
+    environment:
+      MYSQL_ROOT_PASSWORD: testpassword
+      MYSQL_DATABASE: auth_service_test
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpass
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_test_data:/var/lib/mysql
+      - ./src/main/resources/static/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - test-network
+
+  # 테스트용 Redis
+  redis-test:
+    image: redis:7-alpine
+    container_name: redis-test
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes --requirepass testredispass
+    volumes:
+      - redis_test_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      timeout: 20s
+      retries: 5
+    networks:
+      - test-network
+
+  # 테스트용 Kafka
+  zookeeper-test:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper-test
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - test-network
+
+  kafka-test:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka-test
+    depends_on:
+      - zookeeper-test
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-test:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-test:29092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      timeout: 20s
+      retries: 5
+    networks:
+      - test-network
+
+  # 테스트용 애플리케이션
+  auth-service-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    container_name: auth-service-test
+    depends_on:
+      mysql-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+      kafka-test:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: test
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-test:3306/auth_service_test
+      SPRING_DATASOURCE_USERNAME: testuser
+      SPRING_DATASOURCE_PASSWORD: testpass
+      SPRING_REDIS_HOST: redis-test
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: testredispass
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka-test:29092
+      JWT_SECRET: test-secret-key-for-jwt-testing-purposes-minimum-256-bits-required
+      JWT_ACCESS_TOKEN_EXPIRATION: 3600
+      JWT_REFRESH_TOKEN_EXPIRATION: 86400
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+    networks:
+      - test-network
+
+  # 테스트 실행기 (Newman for API tests)
+  api-tests:
+    image: postman/newman:alpine
+    container_name: api-tests
+    depends_on:
+      auth-service-test:
+        condition: service_healthy
+    volumes:
+      - ./tests/postman:/etc/newman
+    command: >
+      run /etc/newman/AuthService-API-Tests.postman_collection.json
+      --environment /etc/newman/test-environment.postman_environment.json
+      --reporters cli,junit
+      --reporter-junit-export /etc/newman/test-results.xml
+    networks:
+      - test-network
+
+  # 성능 테스트 (K6)
+  performance-tests:
+    image: grafana/k6:latest
+    container_name: performance-tests
+    depends_on:
+      auth-service-test:
+        condition: service_healthy
+    volumes:
+      - ./tests/k6:/scripts
+    command: run /scripts/load-test.js
+    environment:
+      API_BASE_URL: http://auth-service-test:8080
+    networks:
+      - test-network
+
+volumes:
+  mysql_test_data:
+  redis_test_data:
+
+networks:
+  test-network:
+    driver: bridge

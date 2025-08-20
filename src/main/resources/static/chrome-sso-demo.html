@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome SSO Demo - DevOps Platform</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .button {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+        }
+        .button:hover {
+            background: #3182ce;
+            transform: translateY(-2px);
+        }
+        .button.danger {
+            background: #e53e3e;
+        }
+        .button.danger:hover {
+            background: #c53030;
+        }
+        .token-display {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            word-break: break-all;
+            font-size: 12px;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #2d3748;
+        }
+        .app-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .app-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        .app-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .app-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .app-status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .app-status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Chrome SSO 데모</h1>
+            <p>DevOps Platform Authentication Service</p>
+        </div>
+
+        <div id="loginStatus" class="status info">
+            SSO 상태를 확인하는 중...
+        </div>
+
+        <div class="section">
+            <h3>🚀 1단계: 로그인 및 SSO 토큰 생성</h3>
+            <button class="button" onclick="login()">일반 로그인</button>
+            <button class="button" onclick="upgradeToSSO()">SSO 토큰 생성</button>
+            <div id="tokenDisplay" class="token-display" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h3>🌐 2단계: 크롬 브라우저 SSO 저장</h3>
+            <p>SSO 토큰을 로컬스토리지에 저장하여 브라우저 세션 유지</p>
+            <button class="button" onclick="saveSSOToChrome()">Chrome에 SSO 저장</button>
+            <button class="button" onclick="loadSSOFromChrome()">Chrome에서 SSO 로드</button>
+        </div>
+
+        <div class="section">
+            <h3>📱 3단계: 연동된 애플리케이션</h3>
+            <div class="app-list">
+                <div class="app-card">
+                    <h4>📊 Analytics Dashboard</h4>
+                    <span class="app-status disconnected" id="app1Status">연결 안됨</span>
+                    <br><br>
+                    <button class="button" onclick="connectApp('analytics-dashboard', 'Analytics Dashboard')">연결</button>
+                </div>
+                <div class="app-card">
+                    <h4>🛠️ DevOps Console</h4>
+                    <span class="app-status disconnected" id="app2Status">연결 안됨</span>
+                    <br><br>
+                    <button class="button" onclick="connectApp('devops-console', 'DevOps Console')">연결</button>
+                </div>
+                <div class="app-card">
+                    <h4>📋 Project Manager</h4>
+                    <span class="app-status disconnected" id="app3Status">연결 안됨</span>
+                    <br><br>
+                    <button class="button" onclick="connectApp('project-manager', 'Project Manager')">연결</button>
+                </div>
+                <div class="app-card">
+                    <h4>💬 Team Chat</h4>
+                    <span class="app-status disconnected" id="app4Status">연결 안됨</span>
+                    <br><br>
+                    <button class="button" onclick="connectApp('team-chat', 'Team Chat')">연결</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📋 4단계: SSO 세션 관리</h3>
+            <button class="button" onclick="getSessionInfo()">세션 정보 확인</button>
+            <button class="button" onclick="validateSSO()">SSO 토큰 검증</button>
+            <button class="button danger" onclick="logout()">전체 로그아웃</button>
+            <div id="sessionInfo" style="margin-top: 15px;"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentJWT = null;
+        let currentSSO = null;
+        const API_BASE = 'http://localhost:8080';
+
+        // 로그인 상태 확인
+        window.onload = function() {
+            checkSSOStatus();
+            loadSSOFromChrome();
+        };
+
+        async function login() {
+            try {
+                // 테스트용 로그인
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'test@example.com',
+                        password: 'password123'
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    currentJWT = data.accessToken;
+                    updateStatus('로그인 성공! JWT 토큰을 받았습니다.', 'success');
+                } else {
+                    updateStatus('로그인 실패: ' + data.message, 'error');
+                }
+            } catch (error) {
+                updateStatus('로그인 오류: ' + error.message, 'error');
+            }
+        }
+
+        async function upgradeToSSO() {
+            if (!currentJWT) {
+                updateStatus('먼저 로그인을 해주세요.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/sso/upgrade`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        jwt_token: currentJWT
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    currentSSO = data.sso_token;
+                    updateStatus('SSO 토큰 생성 성공!', 'success');
+                    document.getElementById('tokenDisplay').style.display = 'block';
+                    document.getElementById('tokenDisplay').textContent = 
+                        `SSO Token: ${currentSSO.substring(0, 50)}...`;
+                } else {
+                    updateStatus('SSO 토큰 생성 실패: ' + data.error, 'error');
+                }
+            } catch (error) {
+                updateStatus('SSO 업그레이드 오류: ' + error.message, 'error');
+            }
+        }
+
+        function saveSSOToChrome() {
+            if (!currentSSO) {
+                updateStatus('먼저 SSO 토큰을 생성해주세요.', 'error');
+                return;
+            }
+
+            // Chrome 브라우저의 로컬스토리지에 저장
+            localStorage.setItem('devops_sso_token', currentSSO);
+            localStorage.setItem('devops_sso_timestamp', Date.now().toString());
+            
+            // 쿠키에도 저장 (다른 도메인에서 접근 가능)
+            document.cookie = `devops_sso=${currentSSO}; path=/; max-age=28800; SameSite=Lax`;
+            
+            updateStatus('Chrome 브라우저에 SSO 토큰이 저장되었습니다!', 'success');
+        }
+
+        function loadSSOFromChrome() {
+            // 로컬스토리지에서 SSO 토큰 로드
+            const storedSSO = localStorage.getItem('devops_sso_token');
+            const timestamp = localStorage.getItem('devops_sso_timestamp');
+            
+            if (storedSSO && timestamp) {
+                const now = Date.now();
+                const stored = parseInt(timestamp);
+                const hours = (now - stored) / (1000 * 60 * 60);
+                
+                if (hours < 8) { // 8시간 이내
+                    currentSSO = storedSSO;
+                    updateStatus(`Chrome에서 SSO 토큰을 로드했습니다! (${Math.round(8-hours)}시간 남음)`, 'success');
+                    document.getElementById('tokenDisplay').style.display = 'block';
+                    document.getElementById('tokenDisplay').textContent = 
+                        `SSO Token: ${currentSSO.substring(0, 50)}...`;
+                    return true;
+                } else {
+                    localStorage.removeItem('devops_sso_token');
+                    localStorage.removeItem('devops_sso_timestamp');
+                }
+            }
+            
+            updateStatus('Chrome에 저장된 유효한 SSO 토큰이 없습니다.', 'info');
+            return false;
+        }
+
+        async function connectApp(appId, appName) {
+            if (!currentSSO) {
+                updateStatus('먼저 SSO 토큰을 생성하거나 로드해주세요.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/sso/register-app`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sso_token: currentSSO,
+                        application_id: appId,
+                        application_name: appName
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById(appId.replace('-', '') + 'Status').textContent = '연결됨';
+                    document.getElementById(appId.replace('-', '') + 'Status').className = 'app-status connected';
+                    updateStatus(`${appName} 연결 성공!`, 'success');
+                } else {
+                    updateStatus(`${appName} 연결 실패: ` + data.error, 'error');
+                }
+            } catch (error) {
+                updateStatus(`${appName} 연결 오류: ` + error.message, 'error');
+            }
+        }
+
+        async function getSessionInfo() {
+            if (!currentSSO) {
+                updateStatus('먼저 SSO 토큰을 생성하거나 로드해주세요.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/sso/session?sso_token=${currentSSO}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('sessionInfo').innerHTML = 
+                        `<pre>${JSON.stringify(data.session, null, 2)}</pre>`;
+                    updateStatus('세션 정보를 가져왔습니다.', 'success');
+                } else {
+                    updateStatus('세션 정보 조회 실패: ' + data.error, 'error');
+                }
+            } catch (error) {
+                updateStatus('세션 정보 조회 오류: ' + error.message, 'error');
+            }
+        }
+
+        async function validateSSO() {
+            if (!currentSSO) {
+                updateStatus('먼저 SSO 토큰을 생성하거나 로드해주세요.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/sso/validate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sso_token: currentSSO
+                    })
+                });
+
+                const data = await response.json();
+                if (data.valid) {
+                    updateStatus(`SSO 토큰이 유효합니다! 사용자: ${data.user.email}`, 'success');
+                } else {
+                    updateStatus('SSO 토큰이 유효하지 않습니다: ' + data.error, 'error');
+                    currentSSO = null;
+                    localStorage.removeItem('devops_sso_token');
+                }
+            } catch (error) {
+                updateStatus('SSO 검증 오류: ' + error.message, 'error');
+            }
+        }
+
+        async function logout() {
+            if (!currentSSO) {
+                updateStatus('로그아웃할 SSO 세션이 없습니다.', 'info');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/sso/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sso_token: currentSSO
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    currentSSO = null;
+                    currentJWT = null;
+                    localStorage.removeItem('devops_sso_token');
+                    localStorage.removeItem('devops_sso_timestamp');
+                    document.cookie = 'devops_sso=; path=/; max-age=0';
+                    
+                    // 모든 앱 상태 초기화
+                    document.querySelectorAll('.app-status').forEach(status => {
+                        status.textContent = '연결 안됨';
+                        status.className = 'app-status disconnected';
+                    });
+                    
+                    document.getElementById('tokenDisplay').style.display = 'none';
+                    document.getElementById('sessionInfo').innerHTML = '';
+                    
+                    updateStatus('전체 로그아웃 완료!', 'success');
+                } else {
+                    updateStatus('로그아웃 실패: ' + data.error, 'error');
+                }
+            } catch (error) {
+                updateStatus('로그아웃 오류: ' + error.message, 'error');
+            }
+        }
+
+        function updateStatus(message, type) {
+            const statusElement = document.getElementById('loginStatus');
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+        }
+
+        function checkSSOStatus() {
+            fetch(`${API_BASE}/sso/status`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'healthy') {
+                        updateStatus('SSO 서비스가 정상 작동 중입니다.', 'success');
+                    }
+                })
+                .catch(error => {
+                    updateStatus('SSO 서비스 연결 실패: ' + error.message, 'error');
+                });
+        }
+
+        // 페이지 종료 시 SSO 상태 유지
+        window.addEventListener('beforeunload', function() {
+            if (currentSSO) {
+                localStorage.setItem('devops_sso_token', currentSSO);
+                localStorage.setItem('devops_sso_timestamp', Date.now().toString());
+            }
+        });
+
+        // 다른 탭에서 로그아웃했을 때 감지
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'devops_sso_token' && !e.newValue) {
+                // SSO 토큰이 삭제되었으면 현재 탭도 로그아웃 상태로 변경
+                currentSSO = null;
+                currentJWT = null;
+                document.getElementById('tokenDisplay').style.display = 'none';
+                updateStatus('다른 탭에서 로그아웃되었습니다.', 'info');
+            }
+        });
+    </script>
+</body>
+</html>

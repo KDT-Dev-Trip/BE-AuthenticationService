@@ -1,0 +1,59 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: authentication-service-base
+  annotations:
+    config.kubernetes.io/local-config: "true"
+
+resources:
+- deployment.yaml
+- service.yaml
+- configmap.yaml
+- secret.yaml
+- serviceaccount.yaml
+- rbac.yaml
+- networkpolicy.yaml
+- poddisruptionbudget.yaml
+- servicemonitor.yaml
+
+commonLabels:
+  app: authentication-service
+  version: v2.0.0
+
+commonAnnotations:
+  config.kubernetes.io/origin: |
+    path: k8s/base/kustomization.yaml
+  app.kubernetes.io/name: authentication-service
+  app.kubernetes.io/component: backend
+  app.kubernetes.io/part-of: devops-platform
+  app.kubernetes.io/managed-by: argocd
+
+images:
+- name: authentication-service
+  newTag: latest
+
+configMapGenerator:
+- name: authentication-service-env
+  literals:
+  - SPRING_PROFILES_ACTIVE=k8s
+  - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,metrics,prometheus,info
+  - LOGGING_LEVEL_ROOT=INFO
+
+secretGenerator:
+- name: authentication-service-runtime-secrets
+  literals:
+  - RUNTIME_SECRET=runtime-generated-secret
+
+replicas:
+- name: authentication-service
+  count: 2
+
+patches:
+- target:
+    kind: Deployment
+    name: authentication-service
+  patch: |-
+    - op: add
+      path: /spec/template/metadata/annotations/config.kubernetes.io~1local-config
+      value: "true"

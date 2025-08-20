@@ -1,0 +1,138 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentication-service-config
+  labels:
+    app: authentication-service
+    component: config
+data:
+  # Redis 설정
+  redis-host: "redis-service"
+  redis-port: "6379"
+  
+  # Kafka 설정
+  kafka-bootstrap-servers: "kafka-service:9092"
+  
+  # 애플리케이션 설정
+  application.yml: |
+    spring:
+      application:
+        name: authentication-service
+      
+      # 데이터베이스 설정
+      datasource:
+        hikari:
+          maximum-pool-size: 10
+          minimum-idle: 5
+          idle-timeout: 300000
+          connection-timeout: 20000
+          validation-timeout: 5000
+          leak-detection-threshold: 60000
+      
+      # JPA 설정
+      jpa:
+        hibernate:
+          ddl-auto: validate
+        show-sql: false
+        properties:
+          hibernate:
+            dialect: org.hibernate.dialect.MySQLDialect
+            format_sql: false
+            jdbc:
+              batch_size: 25
+              order_inserts: true
+              order_updates: true
+            connection:
+              provider_disables_autocommit: true
+            cache:
+              use_second_level_cache: false
+              use_query_cache: false
+      
+      # Redis 설정
+      redis:
+        timeout: 2000ms
+        lettuce:
+          pool:
+            max-active: 10
+            max-idle: 5
+            min-idle: 1
+            max-wait: 5000ms
+      
+      # Kafka 설정
+      kafka:
+        producer:
+          bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS}
+          key-serializer: org.apache.kafka.common.serialization.StringSerializer
+          value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+          acks: all
+          retries: 3
+          properties:
+            enable.idempotence: true
+            max.in.flight.requests.per.connection: 1
+        
+        consumer:
+          bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS}
+          group-id: authentication-service
+          key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+          value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+          auto-offset-reset: earliest
+          properties:
+            spring.json.trusted.packages: "ac.su.kdt.beauthenticationservice.model.dto"
+    
+    # 관리 엔드포인트 설정
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: "health,metrics,prometheus,info"
+          base-path: "/actuator"
+      endpoint:
+        health:
+          show-details: when_authorized
+          probes:
+            enabled: true
+        metrics:
+          enabled: true
+        prometheus:
+          enabled: true
+      metrics:
+        export:
+          prometheus:
+            enabled: true
+        tags:
+          application: ${spring.application.name}
+          environment: ${SPRING_PROFILES_ACTIVE}
+    
+    # 로깅 설정
+    logging:
+      level:
+        ac.su.kdt.beauthenticationservice: INFO
+        org.springframework.security: WARN
+        org.hibernate.SQL: WARN
+        org.hibernate.type.descriptor.sql.BasicBinder: WARN
+      pattern:
+        console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+        file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+      file:
+        name: /app/logs/authentication-service.log
+        max-size: 100MB
+        max-history: 30
+    
+    # OAuth 2.0 설정
+    oauth2:
+      jwt:
+        issuer: "https://auth.devops-platform.com"
+        access-token-expiration: 3600
+        refresh-token-expiration: 86400
+        id-token-expiration: 3600
+      
+      social:
+        google:
+          client-id: "your-google-client-id"
+          client-secret: "your-google-client-secret"
+          redirect-uri: "https://auth.devops-platform.com/social/google/callback"
+        
+        kakao:
+          client-id: "your-kakao-client-id"
+          client-secret: "your-kakao-client-secret"
+          redirect-uri: "https://auth.devops-platform.com/social/kakao/callback"

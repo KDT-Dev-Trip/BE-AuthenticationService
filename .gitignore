@@ -35,3 +35,34 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Environment Variables ###
+.env
+.env.local
+.env.production
+.env.staging
+
+### Logs ###
+logs/
+*.log
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Database ###
+*.db
+*.sqlite
+
+### Docker ###
+docker-compose.override.yml
+
+### Temporary files ###
+*.tmp
+*.temp
+*.swp
+*.swo
+
+### Application specific ###
+application-local.properties
+application-prod.properties

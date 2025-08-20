@@ -1,0 +1,20 @@
+apiVersion: v2
+name: auth-service
+description: A Helm chart for Authentication Service with API Gateway functionality
+type: application
+version: 0.1.0
+appVersion: "0.0.1"
+keywords:
+  - authentication
+  - api-gateway
+  - spring-boot
+  - microservice
+home: https://github.com/your-org/BE-AuthenticationService
+sources:
+  - https://github.com/your-org/BE-AuthenticationService
+maintainers:
+  - name: DevOps Team
+    email: devops@your-org.com
+annotations:
+  category: Authentication
+  licenses: Apache-2.0

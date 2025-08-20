@@ -1,0 +1,186 @@
+# Default values for auth-service
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  imageRegistry: ""
+  storageClass: ""
+
+# Image configuration
+image:
+  registry: ""
+  repository: auth-service
+  tag: "0.0.1"
+  pullPolicy: Always
+  pullSecrets: []
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: "authentication-service"
+
+# Pod Security Context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container Security Context  
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1001
+  capabilities:
+    drop:
+    - ALL
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations: {}
+
+# Deployment configuration
+replicaCount: 2
+
+# Resource limits and requests
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+    ephemeral-storage: "1Gi"
+  limits:
+    memory: "1Gi"
+    cpu: "500m"
+    ephemeral-storage: "2Gi"
+
+# Environment variables
+env:
+  springProfilesActive: "k8s"
+  javaOpts: "-Xms512m -Xmx1024m -XX:+UseG1GC -XX:+UseStringDeduplication"
+  managementEndpointsWebExposureInclude: "health,metrics,prometheus,info"
+  managementEndpointHealthShowDetails: "when_authorized"
+  loggingLevelRoot: "INFO"
+
+# Database configuration
+database:
+  # These values will be injected from secrets
+  secretName: "authentication-service-secrets"
+  urlKey: "database-url"
+  usernameKey: "database-username"
+  passwordKey: "database-password"
+
+# Redis configuration
+redis:
+  configMapName: "authentication-service-config"
+  secretName: "authentication-service-secrets"
+  hostKey: "redis-host"
+  portKey: "redis-port"
+  passwordKey: "redis-password"
+
+# JWT configuration
+jwt:
+  secretName: "authentication-service-secrets"
+  secretKey: "jwt-secret"
+
+# Kafka configuration
+kafka:
+  configMapName: "authentication-service-config"
+  bootstrapServersKey: "kafka-bootstrap-servers"
+
+# Health checks
+healthCheck:
+  liveness:
+    path: /actuator/health/liveness
+    port: 8080
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+    successThreshold: 1
+  readiness:
+    path: /actuator/health/readiness
+    port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+  startup:
+    path: /actuator/health/liveness
+    port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 12
+    successThreshold: 1
+
+# Ingress
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: auth-service.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Autoscaling
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Node selector
+nodeSelector:
+  kubernetes.io/os: linux
+
+# Tolerations
+tolerations:
+  - key: "node-role.kubernetes.io/spot"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# Affinity
+affinity: {}
+
+# Pod annotations for monitoring
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/actuator/prometheus"
+  co.elastic.logs/enabled: "true"
+  co.elastic.logs/multiline.pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  co.elastic.logs/multiline.negate: "true"
+  co.elastic.logs/multiline.match: "after"
+
+# Pod labels
+podLabels:
+  app: authentication-service
+  component: backend
+  tier: application
+
+# ConfigMap data
+configMap:
+  create: true
+  name: "authentication-service-config"
+  data:
+    redis-host: "redis-service"
+    redis-port: "6379"
+    kafka-bootstrap-servers: "kafka:9092"
+
+# Secret (this should be created separately for security)
+secret:
+  create: false
+  name: "authentication-service-secrets"

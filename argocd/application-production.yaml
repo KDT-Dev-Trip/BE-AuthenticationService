@@ -1,0 +1,89 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: be-authentication-service-production
+  namespace: argocd
+  labels:
+    app: authentication-service
+    environment: production
+    team: devops-platform
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: devops-critical
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: devops-critical
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: devops-alerts
+spec:
+  project: devops-platform
+  
+  # 소스 저장소 설정
+  source:
+    repoURL: https://github.com/your-org/BE-AuthenticationService.git
+    targetRevision: main
+    path: k8s/overlays/production
+    
+    # Kustomize 설정
+    kustomize:
+      images:
+        - authentication-service=localhost:5000/authentication-service:stable
+      patchesStrategicMerge:
+        - |-
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: authentication-service
+          spec:
+            replicas: 3
+            template:
+              metadata:
+                annotations:
+                  prometheus.io/scrape: "true"
+                  prometheus.io/port: "8080"
+                  prometheus.io/path: "/actuator/prometheus"
+              spec:
+                resources:
+                  requests:
+                    memory: "512Mi"
+                    cpu: "500m"
+                  limits:
+                    memory: "1Gi"
+                    cpu: "1000m"
+  
+  # 대상 클러스터 설정
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: devops-platform-production
+    
+  # 동기화 정책 (프로덕션은 수동 승인)
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+        
+  # 무시할 차이점 설정
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data
+    - group: networking.k8s.io
+      kind: Ingress
+      jsonPointers:
+        - /spec/tls/0/hosts
+        
+  # 헬스체크 설정
+  revisionHistoryLimit: 20
