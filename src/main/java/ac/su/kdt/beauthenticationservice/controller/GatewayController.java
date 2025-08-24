@@ -26,31 +26,31 @@ public class GatewayController {
     private final JwtService jwtService;
 
     @RequestMapping(value = "/payment/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
-    public ResponseEntity<Object> proxyToPaymentService(HttpServletRequest request, @RequestBody(required = false) Object body) {
+    public ResponseEntity<Object> proxyToPaymentService(HttpServletRequest request, @RequestBody(required = false) String body) {
         return proxyToService(request, body, "payment", 8081);
     }
 
     @RequestMapping(value = "/user/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
-    public ResponseEntity<Object> proxyToUserService(HttpServletRequest request, @RequestBody(required = false) Object body) {
+    public ResponseEntity<Object> proxyToUserService(HttpServletRequest request, @RequestBody(required = false) String body) {
         return proxyToService(request, body, "user", 8082);
     }
 
     @RequestMapping(value = "/mission/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
-    public ResponseEntity<Object> proxyToMissionService(HttpServletRequest request, @RequestBody(required = false) Object body) {
+    public ResponseEntity<Object> proxyToMissionService(HttpServletRequest request, @RequestBody(required = false) String body) {
         return proxyToService(request, body, "mission", 8083);
     }
 
     @RequestMapping(value = "/ai/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
-    public ResponseEntity<Object> proxyToAiService(HttpServletRequest request, @RequestBody(required = false) Object body) {
+    public ResponseEntity<Object> proxyToAiService(HttpServletRequest request, @RequestBody(required = false) String body) {
         return proxyToService(request, body, "ai", 8084);
     }
 
     @RequestMapping(value = "/monitoring/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
-    public ResponseEntity<Object> proxyToMonitoringService(HttpServletRequest request, @RequestBody(required = false) Object body) {
+    public ResponseEntity<Object> proxyToMonitoringService(HttpServletRequest request, @RequestBody(required = false) String body) {
         return proxyToService(request, body, "monitoring", 8085);
     }
 
-    private ResponseEntity<Object> proxyToService(HttpServletRequest request, Object body, String serviceName, int port) {
+    private ResponseEntity<Object> proxyToService(HttpServletRequest request, String body, String serviceName, int port) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || auth.getPrincipal() instanceof String) {
             log.warn("Unauthorized gateway request to {} service", serviceName);
@@ -77,12 +77,14 @@ public class GatewayController {
         // Create headers with authentication info
         HttpHeaders headers = new HttpHeaders();
         
-        // Copy original headers (except Authorization to avoid conflicts)
+        // Copy original headers (except Authorization and Content-Length to avoid conflicts)
         Enumeration<String> headerNames = request.getHeaderNames();
         if (headerNames != null) {
             while (headerNames.hasMoreElements()) {
                 String headerName = headerNames.nextElement();
-                if (!"authorization".equalsIgnoreCase(headerName)) {
+                if (!"authorization".equalsIgnoreCase(headerName) && 
+                    !"content-length".equalsIgnoreCase(headerName) &&
+                    !"host".equalsIgnoreCase(headerName)) {
                     String headerValue = request.getHeader(headerName);
                     headers.add(headerName, headerValue);
                 }
@@ -95,23 +97,25 @@ public class GatewayController {
         headers.add("X-Gateway-Auth", "true");
         headers.add("X-Service-Route", serviceName);
 
-        HttpEntity<Object> entity = new HttpEntity<>(body, headers);
+        // Handle null body for GET requests  
+        String requestBody = (body != null && !body.trim().isEmpty()) ? body : null;
+        HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
 
         try {
             log.debug("Proxying {} {} to {} service (port {}) with user: {}", 
                      request.getMethod(), requestPath, serviceName, port, email);
             
-            ResponseEntity<Object> response = restTemplate.exchange(
+            ResponseEntity<String> response = restTemplate.exchange(
                 targetUrl,
                 HttpMethod.valueOf(request.getMethod()),
                 entity,
-                Object.class
+                String.class
             );
 
             log.debug("Proxy response from {} service: {} for user: {}", 
                      serviceName, response.getStatusCode(), email);
             
-            return response;
+            return ResponseEntity.status(response.getStatusCode()).body(response.getBody());
             
         } catch (Exception e) {
             log.error("Error proxying request to {} service: {}", serviceName, e.getMessage());
