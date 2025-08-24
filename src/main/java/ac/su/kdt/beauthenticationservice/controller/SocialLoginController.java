@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,6 +35,77 @@ public class SocialLoginController {
     private final SocialLoginService socialLoginService;
     private final AuthorizationCodeService authorizationCodeService;
     private final RedisLoginAttemptService redisLoginAttemptService;
+    
+    @Value("${KAKAO_CLIENT_ID}")
+    private String kakaoClientId;
+    
+    @Value("${GOOGLE_CLIENT_ID}")
+    private String googleClientId;
+    
+    /**
+     * 카카오 로그인 시작
+     */
+    @GetMapping("/kakao")
+    @Operation(summary = "Start Kakao Login", description = "카카오 로그인을 시작합니다")
+    public void startKakaoLogin(
+            @Parameter(description = "OAuth client ID") @RequestParam(value = "client_id", required = false) String clientId,
+            @Parameter(description = "Redirect URI") @RequestParam(value = "redirect_uri", required = false) String redirectUri,
+            @Parameter(description = "OAuth scope") @RequestParam(value = "scope", required = false) String scope,
+            @Parameter(description = "State parameter") @RequestParam(value = "state", required = false) String state,
+            @Parameter(description = "Code challenge") @RequestParam(value = "code_challenge", required = false) String codeChallenge,
+            @Parameter(description = "Code challenge method") @RequestParam(value = "code_challenge_method", required = false) String codeChallengeMethod,
+            HttpServletResponse response) throws IOException {
+        
+        // 기본값 설정
+        clientId = clientId != null ? clientId : "default-client";
+        redirectUri = redirectUri != null ? redirectUri : "http://localhost:8080/oauth/callback";
+        scope = scope != null ? scope : "openid profile email";
+        
+        // State 파라미터 생성 (OAuth 파라미터 인코딩)
+        String encodedState = encodeOAuthParams(state, clientId, redirectUri, scope, codeChallenge, codeChallengeMethod);
+        
+        // 카카오 인증 URL 생성
+        String kakaoAuthUrl = "https://kauth.kakao.com/oauth/authorize" +
+                "?client_id=" + kakaoClientId +
+                "&redirect_uri=" + URLEncoder.encode("http://localhost:8080/oauth/social/kakao/callback", StandardCharsets.UTF_8) +
+                "&response_type=code" +
+                "&state=" + URLEncoder.encode(encodedState, StandardCharsets.UTF_8);
+        
+        response.sendRedirect(kakaoAuthUrl);
+    }
+    
+    /**
+     * 구글 로그인 시작
+     */
+    @GetMapping("/google")
+    @Operation(summary = "Start Google Login", description = "구글 로그인을 시작합니다")
+    public void startGoogleLogin(
+            @Parameter(description = "OAuth client ID") @RequestParam(value = "client_id", required = false) String clientId,
+            @Parameter(description = "Redirect URI") @RequestParam(value = "redirect_uri", required = false) String redirectUri,
+            @Parameter(description = "OAuth scope") @RequestParam(value = "scope", required = false) String scope,
+            @Parameter(description = "State parameter") @RequestParam(value = "state", required = false) String state,
+            @Parameter(description = "Code challenge") @RequestParam(value = "code_challenge", required = false) String codeChallenge,
+            @Parameter(description = "Code challenge method") @RequestParam(value = "code_challenge_method", required = false) String codeChallengeMethod,
+            HttpServletResponse response) throws IOException {
+        
+        // 기본값 설정
+        clientId = clientId != null ? clientId : "default-client";
+        redirectUri = redirectUri != null ? redirectUri : "http://localhost:8080/oauth/callback";
+        scope = scope != null ? scope : "openid profile email";
+        
+        // State 파라미터 생성 (OAuth 파라미터 인코딩)
+        String encodedState = encodeOAuthParams(state, clientId, redirectUri, scope, codeChallenge, codeChallengeMethod);
+        
+        // 구글 인증 URL 생성
+        String googleAuthUrl = "https://accounts.google.com/oauth/authorize" +
+                "?client_id=" + googleClientId +
+                "&redirect_uri=" + URLEncoder.encode("http://localhost:8080/oauth/social/google/callback", StandardCharsets.UTF_8) +
+                "&response_type=code" +
+                "&scope=" + URLEncoder.encode("openid profile email", StandardCharsets.UTF_8) +
+                "&state=" + URLEncoder.encode(encodedState, StandardCharsets.UTF_8);
+        
+        response.sendRedirect(googleAuthUrl);
+    }
     
     /**
      * 구글 소셜 로그인 콜백
@@ -206,6 +278,20 @@ public class SocialLoginController {
     }
     
     // === Private Helper Methods ===
+    
+    /**
+     * OAuth 파라미터를 State로 인코딩
+     */
+    private String encodeOAuthParams(String originalState, String clientId, String redirectUri, String scope, String codeChallenge, String codeChallengeMethod) {
+        String params = (originalState != null ? originalState : "") + "|" +
+                       clientId + "|" +
+                       redirectUri + "|" +
+                       scope + "|" +
+                       (codeChallenge != null ? codeChallenge : "") + "|" +
+                       (codeChallengeMethod != null ? codeChallengeMethod : "");
+        
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(params.getBytes(StandardCharsets.UTF_8));
+    }
     
     /**
      * State에서 OAuth 파라미터 추출
