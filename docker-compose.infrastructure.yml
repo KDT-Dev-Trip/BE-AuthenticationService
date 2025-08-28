@@ -1,0 +1,160 @@
+version: '3.8'
+
+services:
+  # # MySQL Database for all services
+  # devtrip-mysql:
+  #   image: mysql:8.0
+  #   container_name: devtrip-mysql
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-1111}
+  #     MYSQL_USER: ${MYSQL_USER:-root}
+  #     MYSQL_PASSWORD: ${MYSQL_PASSWORD:-1111}
+  #   ports:
+  #     - "3306:3306"
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #     - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+  #   networks:
+  #     - devtrip-network
+  #   healthcheck:
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #   restart: unless-stopped
+
+  # Redis Cache - 모든 서비스 공유
+  devtrip-redis:
+    image: redis:7-alpine
+    container_name: devtrip-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - devtrip-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Zookeeper for Kafka
+  devtrip-zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: devtrip-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - devtrip-network
+    restart: unless-stopped
+
+  # Kafka Message Broker - MSA 공통 메시지 버스
+  devtrip-kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: devtrip-kafka
+    depends_on:
+      - devtrip-zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: devtrip-zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://devtrip-kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - devtrip-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "devtrip-kafka:29092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # Kafka UI - 개발/운영 모니터링용
+  devtrip-kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: devtrip-kafka-ui
+    depends_on:
+      - devtrip-kafka
+    ports:
+      - "8079:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: devtrip-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: devtrip-kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: devtrip-zookeeper:2181
+      DYNAMIC_CONFIG_ENABLED: true
+    networks:
+      - devtrip-network
+    restart: unless-stopped
+
+  # Prometheus - 메트릭 수집
+  devtrip-prometheus:
+    image: prom/prometheus:latest
+    container_name: devtrip-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - devtrip-network
+    restart: unless-stopped
+
+  # Grafana - 메트릭 시각화
+  devtrip-grafana:
+    image: grafana/grafana:latest
+    container_name: devtrip-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: devtrip_admin
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - devtrip-network
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  zookeeper_data:
+    driver: local
+  zookeeper_logs:
+    driver: local
+  kafka_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  devtrip-network:
+    driver: bridge
+    name: devtrip-network

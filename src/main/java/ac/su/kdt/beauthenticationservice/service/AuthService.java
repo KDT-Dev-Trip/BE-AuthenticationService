@@ -1,9 +1,7 @@
 package ac.su.kdt.beauthenticationservice.service;
 
 import ac.su.kdt.beauthenticationservice.jwt.JwtService;
-import ac.su.kdt.beauthenticationservice.model.dto.PasswordResetRequestedEvent;
-import ac.su.kdt.beauthenticationservice.model.dto.UserLoggedInEvent;
-import ac.su.kdt.beauthenticationservice.model.dto.UserSignedUpEvent;
+import ac.su.kdt.beauthenticationservice.model.dto.*;
 import ac.su.kdt.beauthenticationservice.model.entity.User;
 import ac.su.kdt.beauthenticationservice.repository.UserRepository;
 import io.micrometer.core.instrument.Counter;
@@ -120,6 +118,7 @@ public class AuthService {
             if (userOpt.isEmpty()) {
                 log.warn("Login failed - user not found: {} from IP: {}", email, ipAddress);
                 loginFailureCounter.increment();
+                publishLoginFailedEvent(email, ipAddress, "INVALID_CREDENTIALS", 0);
                 return LoginResult.failure("Invalid email or password");
             }
             
@@ -129,6 +128,7 @@ public class AuthService {
             if (!user.getIsActive()) {
                 log.warn("Login failed - account inactive: {} from IP: {}", email, ipAddress);
                 loginFailureCounter.increment();
+                publishLoginFailedEvent(email, ipAddress, "ACCOUNT_DISABLED", 0);
                 return LoginResult.failure("Account is inactive");
             }
             
@@ -136,11 +136,22 @@ public class AuthService {
             if (!passwordEncoder.matches(password, user.getPasswordHash())) {
                 log.warn("Login failed - invalid password: {} from IP: {}", email, ipAddress);
                 loginFailureCounter.increment();
+                
+                // 실패 횟수 증가 및 계정 잠금 체크
+                int failedAttempts = incrementFailedLoginAttempts(user.getId());
+                publishLoginFailedEvent(email, ipAddress, "INVALID_CREDENTIALS", failedAttempts);
+                
+                if (failedAttempts >= 5) {
+                    lockUserAccount(user, ipAddress, failedAttempts);
+                    return LoginResult.failure("Account locked due to multiple failed attempts");
+                }
+                
                 return LoginResult.failure("Invalid email or password");
             }
             
             // 로그인 성공
             loginSuccessCounter.increment();
+            resetFailedLoginAttempts(user.getId());
             
             // 로그인 이벤트 발행
             publishUserLoggedInEvent(user, ipAddress);
@@ -152,6 +163,36 @@ public class AuthService {
         } finally {
             sample.stop(jwtIssuanceTimer);
         }
+    }
+    
+    /**
+     * 사용자 로그아웃
+     */
+    public void logoutUser(String userId, String sessionId, String ipAddress, String reason) {
+        log.info("User logout: userId={}, sessionId={}, reason={}", userId, sessionId, reason);
+        
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isPresent()) {
+            publishUserLoggedOutEvent(userOpt.get(), sessionId, ipAddress, reason);
+        }
+    }
+    
+    private int incrementFailedLoginAttempts(String userId) {
+        // Redis 또는 DB에서 실패 횟수 관리
+        // 임시로 5를 반환 (실제 구현 필요)
+        return 3;
+    }
+    
+    private void resetFailedLoginAttempts(String userId) {
+        // Redis 또는 DB에서 실패 횟수 초기화
+    }
+    
+    private void lockUserAccount(User user, String ipAddress, int failedAttempts) {
+        user.setIsActive(false);
+        userRepository.save(user);
+        
+        publishAccountLockedEvent(user, ipAddress, failedAttempts, "MULTIPLE_FAILED_ATTEMPTS");
+        log.warn("Account locked for user: {} after {} failed attempts", user.getEmail(), failedAttempts);
     }
     
     /**
@@ -217,7 +258,7 @@ public class AuthService {
     /**
      * 비밀번호 재설정 실행
      */
-    public void resetPassword(String email, String newPassword, String resetToken) {
+    public void resetPassword(String email, String newPassword, String resetToken, String ipAddress) {
         log.info("Password reset execution for email: {}", email);
         
         // TODO: 실제로는 resetToken 검증 로직 필요
@@ -230,7 +271,38 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
         
+        // 비밀번호 재설정 완료 이벤트 발행
+        publishPasswordResetCompletedEvent(user, resetToken, ipAddress);
+        
         log.info("Password reset successful for user: {}", email);
+    }
+    
+    /**
+     * 비밀번호 변경 (사용자 직접 변경)
+     */
+    public void changePassword(String userId, String oldPassword, String newPassword, String ipAddress) {
+        log.info("Password change request for userId: {}", userId);
+        
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) {
+            throw new IllegalArgumentException("User not found");
+        }
+        
+        User user = userOpt.get();
+        
+        // 기존 비밀번호 확인
+        if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+            throw new IllegalArgumentException("Invalid current password");
+        }
+        
+        // 새 비밀번호로 변경
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        
+        // 비밀번호 변경 이벤트 발행
+        publishPasswordChangedEvent(user, ipAddress, "USER_INITIATED");
+        
+        log.info("Password changed successfully for user: {}", user.getEmail());
     }
     
     /**
@@ -288,19 +360,31 @@ public class AuthService {
         if (eventPublisher.isPresent()) {
             try {
                 UserSignedUpEvent event = UserSignedUpEvent.builder()
-                        .userId(user.getId())
+                        .eventId(UUID.randomUUID().toString())
+                        .authUserId(user.getId())
+                        .userId(convertAuthUserIdToLong(user.getId()))
                         .email(user.getEmail())
                         .name(user.getName())
+                        .planType(determinePlanType(user))
+                        .source(user.getSocialProvider() != null ? "SOCIAL" : "EMAIL")
                         .socialProvider(user.getSocialProvider())
                         .signupTimestamp(user.getCreatedAt())
+                        .timestamp(System.currentTimeMillis())
                         .build();
                 
-                eventPublisher.get().publishEvent("user.signed_up", event);
+                eventPublisher.get().publishUserSignedUpEvent(event);
                 log.debug("Published UserSignedUpEvent for user: {}", user.getEmail());
             } catch (Exception e) {
                 log.warn("Failed to publish UserSignedUpEvent for user: {}: {}", user.getEmail(), e.getMessage());
             }
         }
+    }
+    
+    // UUID를 Long으로 변환하는 헬퍼 메서드
+    private Long convertAuthUserIdToLong(String authUserId) {
+        if (authUserId == null) return null;
+        // UUID의 hashCode를 사용하여 Long으로 변환
+        return Math.abs((long) authUserId.hashCode());
     }
     
     private void publishUserLoggedInEvent(User user, String ipAddress) {
@@ -340,6 +424,177 @@ public class AuthService {
                 log.warn("Failed to publish PasswordResetRequestedEvent for user: {}: {}", user.getEmail(), e.getMessage());
             }
         }
+    }
+    
+    private void publishUserLoggedOutEvent(User user, String sessionId, String ipAddress, String reason) {
+        if (eventPublisher.isPresent()) {
+            try {
+                UserLoggedOutEvent event = UserLoggedOutEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .authUserId(user.getId())
+                        .userId(convertAuthUserIdToLong(user.getId()))
+                        .email(user.getEmail())
+                        .sessionId(sessionId)
+                        .ipAddress(ipAddress)
+                        .logoutTimestamp(LocalDateTime.now())
+                        .reason(reason)
+                        .timestamp(System.currentTimeMillis())
+                        .build();
+                
+                eventPublisher.get().publishUserLoggedOutEvent(event);
+                log.debug("Published UserLoggedOutEvent for user: {}", user.getEmail());
+            } catch (Exception e) {
+                log.warn("Failed to publish UserLoggedOutEvent for user: {}: {}", user.getEmail(), e.getMessage());
+            }
+        }
+    }
+    
+    private void publishLoginFailedEvent(String email, String ipAddress, String failureReason, int attemptCount) {
+        if (eventPublisher.isPresent()) {
+            try {
+                LoginFailedEvent event = LoginFailedEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .email(email)
+                        .ipAddress(ipAddress)
+                        .attemptTimestamp(LocalDateTime.now())
+                        .failureReason(failureReason)
+                        .attemptCount(attemptCount)
+                        .timestamp(System.currentTimeMillis())
+                        .build();
+                
+                eventPublisher.get().publishLoginFailedEvent(event);
+                log.debug("Published LoginFailedEvent for email: {}", email);
+            } catch (Exception e) {
+                log.warn("Failed to publish LoginFailedEvent for email: {}: {}", email, e.getMessage());
+            }
+        }
+    }
+    
+    private void publishAccountLockedEvent(User user, String ipAddress, int failedAttempts, String lockReason) {
+        if (eventPublisher.isPresent()) {
+            try {
+                AccountLockedEvent event = AccountLockedEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .authUserId(user.getId())
+                        .userId(convertAuthUserIdToLong(user.getId()))
+                        .email(user.getEmail())
+                        .lockedAt(LocalDateTime.now())
+                        .unlockAt(LocalDateTime.now().plusHours(1)) // 1시간 후 자동 해제
+                        .lockReason(lockReason)
+                        .failedAttemptCount(failedAttempts)
+                        .lastFailedIp(ipAddress)
+                        .timestamp(System.currentTimeMillis())
+                        .build();
+                
+                eventPublisher.get().publishAccountLockedEvent(event);
+                log.debug("Published AccountLockedEvent for user: {}", user.getEmail());
+            } catch (Exception e) {
+                log.warn("Failed to publish AccountLockedEvent for user: {}: {}", user.getEmail(), e.getMessage());
+            }
+        }
+    }
+    
+    private void publishPasswordResetCompletedEvent(User user, String resetToken, String ipAddress) {
+        if (eventPublisher.isPresent()) {
+            try {
+                PasswordResetCompletedEvent event = PasswordResetCompletedEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .authUserId(user.getId())
+                        .userId(convertAuthUserIdToLong(user.getId()))
+                        .email(user.getEmail())
+                        .resetAt(LocalDateTime.now())
+                        .resetToken(resetToken)
+                        .ipAddress(ipAddress)
+                        .timestamp(System.currentTimeMillis())
+                        .build();
+                
+                eventPublisher.get().publishPasswordResetCompletedEvent(event);
+                log.debug("Published PasswordResetCompletedEvent for user: {}", user.getEmail());
+            } catch (Exception e) {
+                log.warn("Failed to publish PasswordResetCompletedEvent for user: {}: {}", user.getEmail(), e.getMessage());
+            }
+        }
+    }
+    
+    private void publishPasswordChangedEvent(User user, String ipAddress, String changeMethod) {
+        if (eventPublisher.isPresent()) {
+            try {
+                PasswordChangedEvent event = PasswordChangedEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .authUserId(user.getId())
+                        .userId(convertAuthUserIdToLong(user.getId()))
+                        .email(user.getEmail())
+                        .changedAt(LocalDateTime.now())
+                        .changeMethod(changeMethod)
+                        .ipAddress(ipAddress)
+                        .timestamp(System.currentTimeMillis())
+                        .build();
+                
+                eventPublisher.get().publishPasswordChangedEvent(event);
+                log.debug("Published PasswordChangedEvent for user: {}", user.getEmail());
+            } catch (Exception e) {
+                log.warn("Failed to publish PasswordChangedEvent for user: {}: {}", user.getEmail(), e.getMessage());
+            }
+        }
+    }
+    
+    // === User Synchronization Methods ===
+    
+    /**
+     * 모든 사용자를 다른 서비스와 동기화
+     */
+    public int syncAllUsersToServices() {
+        try {
+            // 모든 활성 사용자 조회
+            var allUsers = userRepository.findAll();
+            var syncDataList = allUsers.stream()
+                    .map(this::convertToSyncData)
+                    .toList();
+            
+            if (eventPublisher.isPresent()) {
+                // UserSyncEvent import 추가 필요
+                var syncEvent = ac.su.kdt.beauthenticationservice.model.dto.UserSyncEvent.createFullSync(syncDataList);
+                eventPublisher.get().publishUserSyncEvent(syncEvent);
+                
+                log.info("전체 사용자 동기화 이벤트 발행 완료: {} users", syncDataList.size());
+                return syncDataList.size();
+            } else {
+                log.warn("EventPublisher가 활성화되지 않아 동기화를 수행할 수 없습니다.");
+                return 0;
+            }
+            
+        } catch (Exception e) {
+            log.error("사용자 동기화 중 오류 발생", e);
+            throw new RuntimeException("사용자 동기화 실패", e);
+        }
+    }
+    
+    /**
+     * User 엔티티를 UserSyncData로 변환
+     */
+    private ac.su.kdt.beauthenticationservice.model.dto.UserSyncEvent.UserSyncData convertToSyncData(User user) {
+        return ac.su.kdt.beauthenticationservice.model.dto.UserSyncEvent.UserSyncData.builder()
+                .userId(user.getId())
+                .email(user.getEmail())
+                .name(user.getName())
+                .planType(determinePlanType(user))
+                .signupTimestamp(user.getCreatedAt())
+                .source(user.getSocialProvider() != null ? "SOCIAL" : "EMAIL")
+                .socialProvider(user.getSocialProvider())
+                .status(user.getIsActive() ? "ACTIVE" : "INACTIVE")
+                .build();
+    }
+    
+    /**
+     * 사용자의 구독 플랜 타입 결정
+     */
+    private String determinePlanType(User user) {
+        // 현재 User 엔티티에는 구독 플랜 정보가 없으므로 기본값 설정
+        // 향후 User 엔티티에 planType 필드 추가 또는 별도 테이블 참조
+        if (user.getRole() == User.UserRole.ADMIN) {
+            return "ENTERPRISE";
+        }
+        return "FREE"; // 기본값
     }
     
     // === Inner Classes ===

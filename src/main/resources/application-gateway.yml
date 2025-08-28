@@ -1,0 +1,100 @@
+spring:
+  application:
+    name: api-gateway
+  
+  profiles:
+    active: gateway
+  
+  # Gateway 모드에서는 H2 인메모리 DB 사용 (기본 스키마만 생성)
+  datasource:
+    url: jdbc:h2:mem:gateway;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  
+  # JPA 설정 - 최소한으로 유지
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: false
+    open-in-view: false
+    defer-datasource-initialization: true
+  
+  # Redis 설정 - Gateway 모드에서도 유지 (JWT 캐싱용)
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 2000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 2
+    database: 0
+
+  # Bean definition overriding 허용
+  main:
+    allow-bean-definition-overriding: true
+
+  # Security 설정 - 기존 인증 기능 유지
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://auth.devops-platform.com
+
+server:
+  port: 8080
+
+# OAuth 2.0 Configuration (자체 구현) - 기존 설정 유지
+oauth:
+  jwt:
+    secret: your-512-bit-secret-key-for-jwt-signing-replace-this-in-production-environment-with-secure-random-key
+    access-token-expiration: 3600
+    refresh-token-expiration: 2592000
+  issuer: https://auth.devops-platform.com
+  authorization-code-expiration: 600
+
+# MSA 서비스 URL 설정
+app:
+  services:
+    user:
+      url: http://localhost:8082
+    payment: 
+      url: http://localhost:8081
+    mission:
+      url: http://localhost:8083
+    ai:
+      url: http://localhost:8084
+
+# Actuator & Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus,info,gateway
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  health:
+    redis:
+      enabled: false
+    mail:
+      enabled: false
+
+# Logging Configuration
+logging:
+  level:
+    ac.su.kdt: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Spring Cloud Gateway 라우팅 설정은 GatewayConfig.java에서 처리

@@ -66,3 +66,5 @@ docker-compose.override.yml
 ### Application specific ###
 application-local.properties
 application-prod.properties
+
+.env

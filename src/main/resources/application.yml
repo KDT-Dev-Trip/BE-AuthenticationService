@@ -1,0 +1,106 @@
+spring:
+  application:
+    name: devtrip-auth-gateway
+  
+  # MySQL Database 설정
+  datasource:
+    url: jdbc:mysql://localhost:3306/devtrip-authentication?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: 1111
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  # JPA 설정
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.MySQLDialect
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+    open-in-view: false
+  
+  # Redis 설정 - JWT 캐싱 및 세션 관리
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 2000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 2
+    database: 0
+
+  # Bean definition overriding 허용
+  main:
+    allow-bean-definition-overriding: true
+
+  # WebFlux Security 설정
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://auth.devops-platform.com
+
+  # Kafka 설정 (필요시 사용)
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: auth-gateway-group
+      auto-offset-reset: latest
+
+server:
+  port: 8080
+
+# OAuth 2.0 Configuration (자체 구현)
+oauth:
+  jwt:
+    secret: your-512-bit-secret-key-for-jwt-signing-replace-this-in-production-environment-with-secure-random-key
+    access-token-expiration: 3600
+    refresh-token-expiration: 2592000
+  issuer: https://auth.devops-platform.com
+  authorization-code-expiration: 600
+
+# MSA 서비스 URL 설정
+app:
+  services:
+    user:
+      url: http://localhost:8082
+    payment: 
+      url: http://localhost:8081
+    mission:
+      url: http://localhost:8083
+    ai:
+      url: http://localhost:8084
+
+# Actuator & Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus,info,gateway
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  health:
+    redis:
+      enabled: false
+    mail:
+      enabled: false
+
+# Logging Configuration
+logging:
+  level:
+    ac.su.kdt: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.web.reactive: DEBUG
+    org.springframework.security.web: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

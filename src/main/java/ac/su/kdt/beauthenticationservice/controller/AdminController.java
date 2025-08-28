@@ -1,7 +1,12 @@
 package ac.su.kdt.beauthenticationservice.controller;
 
 import ac.su.kdt.beauthenticationservice.service.RedisLoginAttemptService;
+import ac.su.kdt.beauthenticationservice.service.EventPublisher;
+import ac.su.kdt.beauthenticationservice.repository.UserRepository;
+import ac.su.kdt.beauthenticationservice.model.entity.User;
+import ac.su.kdt.beauthenticationservice.model.dto.UserSignedUpEvent;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +29,8 @@ import java.util.Map;
 public class AdminController {
     
     private final RedisLoginAttemptService redisLoginAttemptService;
+    private final UserRepository userRepository;
+    private final EventPublisher eventPublisher;
     
     @GetMapping("/login-attempts/stats")
     @Operation(
@@ -65,7 +72,9 @@ public class AdminController {
                 """
     )
     public ResponseEntity<Map<String, Object>> unlockAccount(
+            @Parameter(description = "잠금을 해제할 사용자의 이메일 주소", example = "user@example.com")
             @PathVariable String email,
+            @Parameter(description = "잠금을 해제하는 관리자 이름", example = "admin")
             @RequestParam(defaultValue = "admin") String adminUser
     ) {
         try {
@@ -188,5 +197,154 @@ public class AdminController {
         ));
         
         return ResponseEntity.ok(overview);
+    }
+    
+    @PostMapping("/users/resync")
+    @Operation(
+        summary = "사용자 데이터 재동기화",
+        description = """
+                Auth Service의 모든 사용자 데이터를 User Service로 재동기화합니다.
+                
+                **동작 방식:**
+                - Auth Service DB의 모든 사용자 조회
+                - 각 사용자에 대해 UserSignedUpEvent 발송
+                - User Service가 Kafka 이벤트 수신하여 사용자 생성
+                - User Service의 멱등성으로 중복 생성 방지
+                
+                **사용 시나리오:**
+                - Kafka 장애 후 데이터 불일치 해결
+                - User Service 초기 데이터 설정
+                - 데이터 동기화 문제 발생시 복구
+                
+                **주의사항:**
+                - 대량 사용자 환경에서는 시스템 부하 주의
+                - Kafka 브로커가 정상 동작 중일 때만 실행
+                """
+    )
+    public ResponseEntity<Map<String, Object>> resyncAllUsers() {
+        try {
+            log.info("사용자 데이터 재동기화 시작");
+            
+            // 모든 활성 사용자 조회
+            List<User> allUsers = userRepository.findAll()
+                    .stream()
+                    .filter(user -> Boolean.TRUE.equals(user.getIsActive()))
+                    .toList();
+            
+            if (allUsers.isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "success");
+                response.put("message", "동기화할 사용자가 없습니다.");
+                response.put("totalUsers", 0);
+                response.put("syncedUsers", 0);
+                return ResponseEntity.ok(response);
+            }
+            
+            int syncedCount = 0;
+            int failedCount = 0;
+            
+            // 각 사용자에 대해 Kafka 이벤트 발송
+            for (User user : allUsers) {
+                try {
+                    UserSignedUpEvent event = UserSignedUpEvent.from(
+                        user.getId(),
+                        user.getEmail(), 
+                        user.getName(),
+                        "FREE", // 기본 플랜
+                        "ADMIN_RESYNC", // 재동기화 소스
+                        "127.0.0.1" // 관리자 IP
+                    );
+                    
+                    eventPublisher.publishUserSignedUpEvent(event);
+                    syncedCount++;
+                    
+                    log.debug("재동기화 이벤트 발송 완료: userId={}, email={}", 
+                             user.getId(), user.getEmail());
+                    
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("사용자 재동기화 실패: userId={}, email={}", 
+                             user.getId(), user.getEmail(), e);
+                }
+            }
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("message", "사용자 데이터 재동기화가 완료되었습니다.");
+            response.put("totalUsers", allUsers.size());
+            response.put("syncedUsers", syncedCount);
+            response.put("failedUsers", failedCount);
+            response.put("kafkaTopic", "auth.user-signed-up");
+            
+            log.info("사용자 데이터 재동기화 완료: 전체={}, 성공={}, 실패={}", 
+                    allUsers.size(), syncedCount, failedCount);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("사용자 데이터 재동기화 중 오류 발생", e);
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", "재동기화 실패: " + e.getMessage());
+            
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+    
+    @PostMapping("/users/{userId}/resync")
+    @Operation(
+        summary = "특정 사용자 재동기화",
+        description = "특정 사용자 한 명만 User Service로 재동기화합니다."
+    )
+    public ResponseEntity<Map<String, Object>> resyncSingleUser(@PathVariable String userId) {
+        try {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + userId));
+            
+            if (!Boolean.TRUE.equals(user.getIsActive())) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "skipped");
+                response.put("message", "비활성 사용자는 동기화하지 않습니다.");
+                response.put("userId", userId);
+                return ResponseEntity.ok(response);
+            }
+            
+            UserSignedUpEvent event = UserSignedUpEvent.from(
+                user.getId(),
+                user.getEmail(), 
+                user.getName(),
+                "FREE",
+                "ADMIN_SINGLE_RESYNC",
+                "127.0.0.1"
+            );
+            
+            eventPublisher.publishUserSignedUpEvent(event);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("message", "사용자 재동기화가 완료되었습니다.");
+            response.put("userId", userId);
+            response.put("email", user.getEmail());
+            response.put("name", user.getName());
+            
+            log.info("단일 사용자 재동기화 완료: userId={}, email={}", userId, user.getEmail());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+            
+        } catch (Exception e) {
+            log.error("단일 사용자 재동기화 실패: userId={}", userId, e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", "재동기화 실패: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
     }
 }

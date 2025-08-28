@@ -1,0 +1,92 @@
+# Custom Metrics for DevTrip Auto-Scaling
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-metrics-config
+  namespace: devtrip
+data:
+  prometheus-rules.yaml: |
+    groups:
+    - name: devtrip.user.metrics
+      rules:
+      # 활성 사용자 수 메트릭
+      - record: devtrip:active_users_total
+        expr: sum(increase(user_login_total[5m])) - sum(increase(user_logout_total[5m]))
+      
+      # 서비스별 활성 사용자
+      - record: devtrip:active_users_by_service
+        expr: sum(increase(http_requests_total{job=~".*authentication.*"}[5m])) by (service)
+      
+      # 미션 진행 중인 사용자 수
+      - record: devtrip:mission_active_users
+        expr: sum(mission_in_progress_total) by (service)
+      
+      # API 응답 시간이 긴 요청 수
+      - record: devtrip:slow_requests_rate
+        expr: sum(rate(http_request_duration_seconds_bucket{le="2.0"}[5m])) by (service)
+    
+    - name: devtrip.scaling.rules
+      rules:
+      # CPU 사용률 기반 알람
+      - alert: HighCPUUsage
+        expr: avg(rate(container_cpu_usage_seconds_total{namespace="devtrip"}[5m])) by (pod) * 100 > 80
+        for: 2m
+        labels:
+          severity: warning
+          team: devops
+        annotations:
+          summary: "High CPU usage detected"
+          description: "Pod {{ $labels.pod }} CPU usage is {{ $value }}%"
+      
+      # 메모리 사용률 기반 알람  
+      - alert: HighMemoryUsage
+        expr: avg(container_memory_working_set_bytes{namespace="devtrip"} / container_spec_memory_limit_bytes{namespace="devtrip"}) by (pod) * 100 > 85
+        for: 2m
+        labels:
+          severity: warning
+          team: devops
+        annotations:
+          summary: "High memory usage detected"
+          description: "Pod {{ $labels.pod }} memory usage is {{ $value }}%"
+      
+      # 활성 사용자 임계값 초과
+      - alert: HighActiveUsers
+        expr: devtrip:active_users_total > 150
+        for: 1m
+        labels:
+          severity: info
+          team: devops
+        annotations:
+          summary: "High number of active users"
+          description: "Active users: {{ $value }}, consider scaling up services"
+      
+      # API 응답 시간 지연
+      - alert: SlowAPIResponse
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="devtrip"}[5m])) by (le, service)) > 2.0
+        for: 3m
+        labels:
+          severity: warning
+          team: devops
+        annotations:
+          summary: "Slow API response time"
+          description: "Service {{ $labels.service }} 95th percentile latency is {{ $value }}s"
+
+---
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: devtrip-services
+  namespace: devtrip
+  labels:
+    app: devtrip
+spec:
+  selector:
+    matchLabels:
+      monitoring: "true"
+  endpoints:
+  - port: http
+    path: /actuator/prometheus
+    interval: 30s
+  - port: http
+    path: /metrics
+    interval: 30s

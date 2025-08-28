@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "devtrip",
+			"path": "../../../../.."
+		},
+		{
+			"name": "BE-MonitoringService",
+			"path": "../../../../../../BE-MonitoringService"
+		}
+	],
+	"settings": {}
+}

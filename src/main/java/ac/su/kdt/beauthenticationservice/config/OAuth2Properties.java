@@ -63,6 +63,6 @@ public class OAuth2Properties {
         private String authUrl = "https://kauth.kakao.com/oauth/authorize";
         private String tokenUrl = "https://kauth.kakao.com/oauth/token";
         private String userInfoUrl = "https://kapi.kakao.com/v2/user/me";
-        private String scope = "profile_nickname,profile_image,account_email";
+        private String scope = "profile_nickname";
     }
 }

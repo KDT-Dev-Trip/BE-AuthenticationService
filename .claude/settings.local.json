@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker stop:*)",
+      "Bash(docker-compose:*)",
+      "Bash(./gradlew:*)",
+      "Read(/C:\\workspace\\devtrip/**)",
+      "Read(/C:\\workspace\\devtrip/**)",
+      "Read(/C:\\workspace\\devtrip\\BE-payment-service/**)",
+      "Read(/C:\\workspace\\devtrip\\BE-user-management-service/**)",
+      "Read(/C:\\workspace\\devtrip\\BE-AI-evaluation-service\\src\\main\\resources/**)",
+      "Read(/C:\\workspace\\devtrip\\BE-mission-management-service\\src\\main\\resources/**)",
+      "Read(/C:\\workspace\\devtrip\\BE-payment-service/**)",
+      "Read(/C:\\workspace\\devtrip\\BE-payment-service/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -51,7 +51,7 @@ public class ProtectedApiController {
         Optional<User> userOpt = authService.getUserFromToken(userDetails.getRawToken());
         
         Map<String, Object> response = new HashMap<>();
-        response.put("auth0_user_id", userDetails.getAuth0UserId());
+        response.put("user_id", userDetails.getUserId());
         response.put("email", userDetails.getEmail());
         response.put("authenticated_at", LocalDateTime.now());
         response.put("authorities", auth.getAuthorities());
@@ -146,7 +146,7 @@ public class ProtectedApiController {
         
         if (auth != null && auth.getPrincipal() instanceof JwtUserDetails) {
             JwtUserDetails userDetails = (JwtUserDetails) auth.getPrincipal();
-            healthInfo.put("user_id", userDetails.getAuth0UserId());
+            healthInfo.put("user_id", userDetails.getUserId());
             healthInfo.put("user_email", userDetails.getEmail());
             healthInfo.put("authorities", auth.getAuthorities());
         }

@@ -2,6 +2,9 @@ package ac.su.kdt.beauthenticationservice.controller;
 
 import ac.su.kdt.beauthenticationservice.model.entity.User;
 import ac.su.kdt.beauthenticationservice.service.SSOTokenService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -20,15 +23,22 @@ import java.util.Optional;
 @RequestMapping("/sso")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
+@Tag(name = "SSO (Single Sign-On)", description = "SSO 인증 및 세션 관리 API")
 public class SSOController {
     
     private final SSOTokenService ssoTokenService;
     
-    /**
-     * JWT 토큰을 SSO 토큰으로 업그레이드
-     */
     @PostMapping("/upgrade")
-    public ResponseEntity<Map<String, Object>> upgradeToSSO(@RequestBody Map<String, String> request) {
+    @Operation(
+        summary = "JWT 토큰을 SSO 토큰으로 업그레이드",
+        description = """
+                JWT 토큰을 SSO 토큰으로 변환하여 여러 애플리케이션 간 단일 로그인 기능을 제공합니다.
+                SSO 토큰은 8시간 동안 유효하며, 여러 애플리케이션에 등록하여 사용할 수 있습니다.
+                """
+    )
+    public ResponseEntity<Map<String, Object>> upgradeToSSO(
+        @Parameter(description = "JWT 토큰을 포함한 요청 데이터") 
+        @RequestBody Map<String, String> request) {
         try {
             String jwtToken = request.get("jwt_token");
             
@@ -65,11 +75,17 @@ public class SSOController {
         }
     }
     
-    /**
-     * SSO 토큰 검증
-     */
     @PostMapping("/validate")
-    public ResponseEntity<Map<String, Object>> validateSSOToken(@RequestBody Map<String, String> request) {
+    @Operation(
+        summary = "SSO 토큰 검증",
+        description = """
+                SSO 토큰의 유효성을 검증하고 사용자 정보를 반환합니다.
+                유효한 토큰인 경우 사용자 ID, 이메일, 이름, 역할 등의 정보를 포함합니다.
+                """
+    )
+    public ResponseEntity<Map<String, Object>> validateSSOToken(
+        @Parameter(description = "SSO 토큰을 포함한 요청 데이터") 
+        @RequestBody Map<String, String> request) {
         try {
             String ssoToken = request.get("sso_token");
             
@@ -112,11 +128,17 @@ public class SSOController {
         }
     }
     
-    /**
-     * 애플리케이션 등록 (SSO 세션에 앱 추가)
-     */
     @PostMapping("/register-app")
-    public ResponseEntity<Map<String, Object>> registerApplication(@RequestBody Map<String, String> request) {
+    @Operation(
+        summary = "애플리케이션 등록",
+        description = """
+                SSO 세션에 애플리케이션을 등록하여 단일 로그인 기능을 활성화합니다.
+                등록된 애플리케이션들은 SSO 로그아웃 시 함께 로그아웃됩니다.
+                """
+    )
+    public ResponseEntity<Map<String, Object>> registerApplication(
+        @Parameter(description = "SSO 토큰, 애플리케이션 ID, 애플리케이션 이름을 포함한 요청 데이터") 
+        @RequestBody Map<String, String> request) {
         try {
             String ssoToken = request.get("sso_token");
             String applicationId = request.get("application_id");
@@ -154,11 +176,17 @@ public class SSOController {
         }
     }
     
-    /**
-     * SSO 세션 정보 조회
-     */
     @GetMapping("/session")
-    public ResponseEntity<Map<String, Object>> getSessionInfo(@RequestParam String sso_token) {
+    @Operation(
+        summary = "SSO 세션 정보 조회",
+        description = """
+                SSO 세션에 등록된 모든 애플리케이션 정보와 사용자 데이터를 조회합니다.
+                세션 만료 시간, 등록된 애플리케이션 목록 등의 정보를 포함합니다.
+                """
+    )
+    public ResponseEntity<Map<String, Object>> getSessionInfo(
+        @Parameter(description = "SSO 세션 정보를 조회할 SSO 토큰", required = true, example = "sso_xxxx1234567890abcdef") 
+        @RequestParam String sso_token) {
         try {
             if (sso_token == null || sso_token.trim().isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of(
@@ -191,11 +219,17 @@ public class SSOController {
         }
     }
     
-    /**
-     * SSO 로그아웃 (전체 세션 종료)
-     */
     @PostMapping("/logout")
-    public ResponseEntity<Map<String, Object>> logout(@RequestBody Map<String, String> request) {
+    @Operation(
+        summary = "SSO 로그아웃",
+        description = """
+                SSO 세션을 종료하여 모든 등록된 애플리케이션에서 로그아웃합니다.
+                이 작업은 되돌릴 수 없으며, 다시 로그인하려면 새로운 JWT 토큰으로 SSO 업그레이드를 수행해야 합니다.
+                """
+    )
+    public ResponseEntity<Map<String, Object>> logout(
+        @Parameter(description = "SSO 토큰을 포함한 요청 데이터") 
+        @RequestBody Map<String, String> request) {
         try {
             String ssoToken = request.get("sso_token");
             
@@ -229,10 +263,14 @@ public class SSOController {
         }
     }
     
-    /**
-     * SSO 상태 확인
-     */
     @GetMapping("/status")
+    @Operation(
+        summary = "SSO 서비스 상태 확인",
+        description = """
+                SSO 서비스의 동작 상태와 사용 가능한 기능들을 확인합니다.
+                서비스 상태, 지원 기능, 사용 가능한 엔드포인트 목록을 담고 있습니다.
+                """
+    )
     public ResponseEntity<Map<String, Object>> getStatus() {
         Map<String, Object> response = new HashMap<>();
         response.put("service", "sso-authentication-service");

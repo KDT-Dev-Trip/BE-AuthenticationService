@@ -1,25 +1,33 @@
 package ac.su.kdt.beauthenticationservice.controller;
 
+import ac.su.kdt.beauthenticationservice.config.OAuth2Properties;
+import ac.su.kdt.beauthenticationservice.jwt.JwtService;
+import ac.su.kdt.beauthenticationservice.model.entity.User;
 import ac.su.kdt.beauthenticationservice.service.AuthorizationCodeService;
 import ac.su.kdt.beauthenticationservice.service.RedisLoginAttemptService;
 import ac.su.kdt.beauthenticationservice.service.SocialLoginService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
 
-import java.io.IOException;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * 소셜 로그인 콜백 처리 컨트롤러
@@ -35,367 +43,283 @@ public class SocialLoginController {
     private final SocialLoginService socialLoginService;
     private final AuthorizationCodeService authorizationCodeService;
     private final RedisLoginAttemptService redisLoginAttemptService;
+    private final JwtService jwtService;
+    private final OAuth2Properties oauth2Properties;
     
-    @Value("${KAKAO_CLIENT_ID}")
-    private String kakaoClientId;
+    @Value("${app.frontend.url:http://localhost:3000}")
+    private String frontendUrl;
     
-    @Value("${GOOGLE_CLIENT_ID}")
-    private String googleClientId;
-    
-    /**
-     * 카카오 로그인 시작
-     */
-    @GetMapping("/kakao")
-    @Operation(summary = "Start Kakao Login", description = "카카오 로그인을 시작합니다")
-    public void startKakaoLogin(
-            @Parameter(description = "OAuth client ID") @RequestParam(value = "client_id", required = false) String clientId,
-            @Parameter(description = "Redirect URI") @RequestParam(value = "redirect_uri", required = false) String redirectUri,
-            @Parameter(description = "OAuth scope") @RequestParam(value = "scope", required = false) String scope,
-            @Parameter(description = "State parameter") @RequestParam(value = "state", required = false) String state,
-            @Parameter(description = "Code challenge") @RequestParam(value = "code_challenge", required = false) String codeChallenge,
-            @Parameter(description = "Code challenge method") @RequestParam(value = "code_challenge_method", required = false) String codeChallengeMethod,
-            HttpServletResponse response) throws IOException {
-        
-        // 기본값 설정
-        clientId = clientId != null ? clientId : "default-client";
-        redirectUri = redirectUri != null ? redirectUri : "http://localhost:8080/oauth/callback";
-        scope = scope != null ? scope : "openid profile email";
-        
-        // State 파라미터 생성 (OAuth 파라미터 인코딩)
-        String encodedState = encodeOAuthParams(state, clientId, redirectUri, scope, codeChallenge, codeChallengeMethod);
-        
-        // 카카오 인증 URL 생성
-        String kakaoAuthUrl = "https://kauth.kakao.com/oauth/authorize" +
-                "?client_id=" + kakaoClientId +
-                "&redirect_uri=" + URLEncoder.encode("http://localhost:8080/oauth/social/kakao/callback", StandardCharsets.UTF_8) +
-                "&response_type=code" +
-                "&state=" + URLEncoder.encode(encodedState, StandardCharsets.UTF_8);
-        
-        response.sendRedirect(kakaoAuthUrl);
-    }
-    
-    /**
-     * 구글 로그인 시작
-     */
-    @GetMapping("/google")
-    @Operation(summary = "Start Google Login", description = "구글 로그인을 시작합니다")
-    public void startGoogleLogin(
-            @Parameter(description = "OAuth client ID") @RequestParam(value = "client_id", required = false) String clientId,
-            @Parameter(description = "Redirect URI") @RequestParam(value = "redirect_uri", required = false) String redirectUri,
-            @Parameter(description = "OAuth scope") @RequestParam(value = "scope", required = false) String scope,
-            @Parameter(description = "State parameter") @RequestParam(value = "state", required = false) String state,
-            @Parameter(description = "Code challenge") @RequestParam(value = "code_challenge", required = false) String codeChallenge,
-            @Parameter(description = "Code challenge method") @RequestParam(value = "code_challenge_method", required = false) String codeChallengeMethod,
-            HttpServletResponse response) throws IOException {
-        
-        // 기본값 설정
-        clientId = clientId != null ? clientId : "default-client";
-        redirectUri = redirectUri != null ? redirectUri : "http://localhost:8080/oauth/callback";
-        scope = scope != null ? scope : "openid profile email";
-        
-        // State 파라미터 생성 (OAuth 파라미터 인코딩)
-        String encodedState = encodeOAuthParams(state, clientId, redirectUri, scope, codeChallenge, codeChallengeMethod);
-        
-        // 구글 인증 URL 생성
-        String googleAuthUrl = "https://accounts.google.com/oauth/authorize" +
-                "?client_id=" + googleClientId +
-                "&redirect_uri=" + URLEncoder.encode("http://localhost:8080/oauth/social/google/callback", StandardCharsets.UTF_8) +
-                "&response_type=code" +
-                "&scope=" + URLEncoder.encode("openid profile email", StandardCharsets.UTF_8) +
-                "&state=" + URLEncoder.encode(encodedState, StandardCharsets.UTF_8);
-        
-        response.sendRedirect(googleAuthUrl);
-    }
-    
-    /**
-     * 구글 소셜 로그인 콜백
-     */
-    @GetMapping("/google/callback")
-    @Operation(summary = "Google Login Callback", description = "Google OAuth 콜백을 처리합니다")
-    public void googleCallback(
-            @Parameter(description = "Google authorization code") @RequestParam("code") String code,
-            @Parameter(description = "State parameter containing original OAuth params") @RequestParam(value = "state", required = false) String state,
-            @Parameter(description = "Error parameter") @RequestParam(value = "error", required = false) String error,
-            HttpServletRequest request,
-            HttpServletResponse response) throws IOException {
-        
-        String ipAddress = getClientIpAddress(request);
-        log.info("Google login callback from IP: {}", ipAddress);
-        
-        // 오류 처리
-        if (error != null) {
-            log.warn("Google login error: {} from IP: {}", error, ipAddress);
-            redirectWithError(response, "access_denied", "Google login was cancelled or failed", state);
-            return;
-        }
-        
-        if (code == null) {
-            log.warn("Missing authorization code from Google callback, IP: {}", ipAddress);
-            redirectWithError(response, "invalid_request", "Authorization code is missing", state);
-            return;
-        }
+    @GetMapping("/google/auth")
+    @Operation(
+        summary = "Google 소셜 로그인 URL 생성",
+        description = """
+                Google OAuth2 인증을 위한 인증 URL을 생성합니다.
+                사용자를 이 URL로 리다이렉트하여 Google 로그인을 시작합니다.
+                """
+    )
+    public ResponseEntity<Map<String, Object>> getGoogleAuthUrl(
+            @Parameter(description = "로그인 성공 후 돌아갈 URL", example = "http://localhost:3000/auth/callback")
+            @RequestParam(defaultValue = "") String redirect_uri,
+            @Parameter(description = "CSRF 방지를 위한 상태 값", example = "random-state-string")
+            @RequestParam(defaultValue = "") String state) {
         
         try {
-            // State에서 원본 OAuth 파라미터 추출
-            OAuthParams oauthParams = extractOAuthParamsFromState(state);
-            if (oauthParams == null) {
-                log.warn("Invalid state parameter from IP: {}", ipAddress);
-                redirectWithError(response, "invalid_state", "Invalid state parameter", state);
-                return;
+            OAuth2Properties.Google google = oauth2Properties.getSocial().getGoogle();
+            String actualState = state.isEmpty() ? UUID.randomUUID().toString() : state;
+            
+            String authUrl = google.getAuthUrl() + "?"
+                    + "client_id=" + URLEncoder.encode(google.getClientId(), StandardCharsets.UTF_8)
+                    + "&redirect_uri=" + URLEncoder.encode(google.getRedirectUri(), StandardCharsets.UTF_8)
+                    + "&scope=" + URLEncoder.encode(google.getScope(), StandardCharsets.UTF_8)
+                    + "&response_type=code"
+                    + "&state=" + URLEncoder.encode(actualState, StandardCharsets.UTF_8);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("auth_url", authUrl);
+            response.put("provider", "google");
+            response.put("state", actualState);
+            response.put("callback_uri", google.getRedirectUri()); // 실제 OAuth 콜백 URI
+            response.put("frontend_redirect", !redirect_uri.isEmpty() ? redirect_uri : frontendUrl + "/auth/callback"); // 프론트엔드용
+            
+            log.info("Google auth URL generated for callback_uri: {}", google.getRedirectUri());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Failed to generate Google auth URL", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                "error", "AUTH_URL_GENERATION_FAILED",
+                "message", "Google 인증 URL 생성에 실패했습니다"
+            ));
+        }
+    }
+    
+    @GetMapping("/kakao/auth")
+    @Operation(
+        summary = "Kakao 소셜 로그인 URL 생성",
+        description = """
+                Kakao OAuth2 인증을 위한 인증 URL을 생성합니다.
+                사용자를 이 URL로 리다이렉트하여 Kakao 로그인을 시작합니다.
+                """
+    )
+    public ResponseEntity<Map<String, Object>> getKakaoAuthUrl(
+            @Parameter(description = "로그인 성공 후 돌아갈 URL", example = "http://localhost:3000/auth/callback")
+            @RequestParam(defaultValue = "") String redirect_uri,
+            @Parameter(description = "CSRF 방지를 위한 상태 값", example = "random-state-string")
+            @RequestParam(defaultValue = "") String state) {
+        
+        try {
+            OAuth2Properties.Kakao kakao = oauth2Properties.getSocial().getKakao();
+            String actualState = state.isEmpty() ? UUID.randomUUID().toString() : state;
+            
+            String authUrl = kakao.getAuthUrl() + "?"
+                    + "client_id=" + URLEncoder.encode(kakao.getClientId(), StandardCharsets.UTF_8)
+                    + "&redirect_uri=" + URLEncoder.encode(kakao.getRedirectUri(), StandardCharsets.UTF_8)
+                    + "&scope=" + URLEncoder.encode(kakao.getScope(), StandardCharsets.UTF_8)
+                    + "&response_type=code"
+                    + "&state=" + URLEncoder.encode(actualState, StandardCharsets.UTF_8);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("auth_url", authUrl);
+            response.put("provider", "kakao");
+            response.put("state", actualState);
+            response.put("callback_uri", kakao.getRedirectUri()); // 실제 OAuth 콜백 URI
+            response.put("frontend_redirect", !redirect_uri.isEmpty() ? redirect_uri : frontendUrl + "/auth/callback"); // 프론트엔드용
+            
+            log.info("Kakao auth URL generated for callback_uri: {}", kakao.getRedirectUri());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Failed to generate Kakao auth URL", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                "error", "AUTH_URL_GENERATION_FAILED",
+                "message", "Kakao 인증 URL 생성에 실패했습니다"
+            ));
+        }
+    }
+    
+    @GetMapping("/google/callback")
+    @Operation(
+        summary = "Google 소셜 로그인 콜백",
+        description = """
+                Google OAuth2 인증 콜백을 처리하고 JWT 토큰을 발급합니다.
+                사용자를 프론트엔드로 리다이렉트하며, 토큰을 URL 파라미터로 전달합니다.
+                """
+    )
+    public Mono<Void> handleGoogleCallback(
+            @Parameter(description = "Google에서 발급한 Authorization Code", required = true)
+            @RequestParam String code,
+            @Parameter(description = "CSRF 방지를 위한 상태 값")
+            @RequestParam(required = false) String state,
+            @Parameter(description = "오류 정보")
+            @RequestParam(required = false) String error,
+            ServerWebExchange exchange) {
+        
+        String ipAddress = getClientIpAddress(exchange);
+        ServerHttpResponse response = exchange.getResponse();
+        
+        try {
+            // 오류 처리
+            if (error != null && !error.isEmpty()) {
+                log.warn("Google OAuth error from IP {}: {}", ipAddress, error);
+                return redirectToFrontend(response, frontendUrl + "/auth/error?provider=google&error=" + 
+                    URLEncoder.encode(error, StandardCharsets.UTF_8));
             }
+            
+            if (code == null || code.isEmpty()) {
+                log.warn("Google OAuth callback missing code from IP: {}", ipAddress);
+                return redirectToFrontend(response, frontendUrl + "/auth/error?provider=google&error=missing_code");
+            }
+            
+            log.info("Processing Google OAuth callback from IP: {}", ipAddress);
             
             // Google 소셜 로그인 처리
             SocialLoginService.SocialLoginResult loginResult = socialLoginService.processGoogleLogin(code);
             
             if (!loginResult.isSuccess()) {
-                log.warn("Google login failed from IP: {}: {}", ipAddress, loginResult.getErrorMessage());
-                
-                // Redis에 실패 시도 기록 (이메일이 있는 경우)
-                if (loginResult.getUser() != null && loginResult.getUser().getEmail() != null) {
-                    redisLoginAttemptService.recordFailedAttempt(loginResult.getUser().getEmail(), ipAddress);
-                }
-                
-                redirectWithError(response, "login_failed", loginResult.getErrorMessage(), oauthParams.getOriginalState());
-                return;
+                log.error("Google login failed from IP {}: {}", ipAddress, loginResult.getErrorMessage());
+                return redirectToFrontend(response, frontendUrl + "/auth/error?provider=google&error=" + 
+                    URLEncoder.encode("login_failed", StandardCharsets.UTF_8));
             }
             
-            // 계정 잠금 확인
-            String email = loginResult.getUser().getEmail();
-            if (redisLoginAttemptService.isAccountLocked(email)) {
-                log.warn("Account locked during Google login: {} from IP: {}", email, ipAddress);
-                redirectWithError(response, "account_locked", "Account is temporarily locked", oauthParams.getOriginalState());
-                return;
-            }
+            User user = loginResult.getUser();
             
-            // OAuth Authorization Code 생성
-            String authorizationCode = authorizationCodeService.generateAuthorizationCode(
-                loginResult.getUser().getId(),
-                oauthParams.getClientId(),
-                oauthParams.getRedirectUri(),
-                oauthParams.getScope(),
-                oauthParams.getOriginalState(),
-                oauthParams.getCodeChallenge(),
-                oauthParams.getCodeChallengeMethod()
-            );
+            // JWT 토큰 생성
+            String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), user.getRole().toString());
+            String refreshToken = jwtService.generateRefreshToken(user.getId());
             
-            // 성공 시 실패 카운트 초기화
-            redisLoginAttemptService.recordSuccessfulLogin(email);
+            log.info("Google login successful for user: {} from IP: {}", user.getEmail(), ipAddress);
             
-            // 원래 애플리케이션으로 리다이렉트
-            redirectWithSuccess(response, oauthParams.getRedirectUri(), authorizationCode, oauthParams.getOriginalState());
+            // 프론트엔드로 리다이렉트 (토큰 포함)
+            String redirectUrl = frontendUrl + "/auth/success?" + 
+                "access_token=" + URLEncoder.encode(accessToken, StandardCharsets.UTF_8) +
+                "&refresh_token=" + URLEncoder.encode(refreshToken, StandardCharsets.UTF_8) +
+                "&provider=google" +
+                (state != null ? "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8) : "");
             
-            log.info("Google login successful for user: {} from IP: {}", email, ipAddress);
+            return redirectToFrontend(response, redirectUrl);
             
         } catch (Exception e) {
-            log.error("Google login callback failed from IP: {}", ipAddress, e);
-            redirectWithError(response, "server_error", "Internal server error during Google login", state);
+            log.error("Google OAuth callback error from IP: {}", ipAddress, e);
+            return redirectToFrontend(response, frontendUrl + "/auth/error?provider=google&error=" + 
+                URLEncoder.encode("internal_error", StandardCharsets.UTF_8));
         }
     }
     
-    /**
-     * 카카오 소셜 로그인 콜백
-     */
     @GetMapping("/kakao/callback")
-    @Operation(summary = "Kakao Login Callback", description = "Kakao OAuth 콜백을 처리합니다")
-    public void kakaoCallback(
-            @Parameter(description = "Kakao authorization code") @RequestParam("code") String code,
-            @Parameter(description = "State parameter containing original OAuth params") @RequestParam(value = "state", required = false) String state,
-            @Parameter(description = "Error parameter") @RequestParam(value = "error", required = false) String error,
-            HttpServletRequest request,
-            HttpServletResponse response) throws IOException {
+    @Operation(
+        summary = "Kakao 소셜 로그인 콜백",
+        description = """
+                Kakao OAuth2 인증 콜백을 처리하고 JWT 토큰을 발급합니다.
+                사용자를 프론트엔드로 리다이렉트하며, 토큰을 URL 파라미터로 전달합니다.
+                """
+    )
+    public Mono<Void> handleKakaoCallback(
+            @Parameter(description = "Kakao에서 발급한 Authorization Code", required = true)
+            @RequestParam String code,
+            @Parameter(description = "CSRF 방지를 위한 상태 값")
+            @RequestParam(required = false) String state,
+            @Parameter(description = "오류 정보")
+            @RequestParam(required = false) String error,
+            ServerWebExchange exchange) {
         
-        String ipAddress = getClientIpAddress(request);
-        log.info("Kakao login callback from IP: {}", ipAddress);
-        
-        // 오류 처리
-        if (error != null) {
-            log.warn("Kakao login error: {} from IP: {}", error, ipAddress);
-            redirectWithError(response, "access_denied", "Kakao login was cancelled or failed", state);
-            return;
-        }
-        
-        if (code == null) {
-            log.warn("Missing authorization code from Kakao callback, IP: {}", ipAddress);
-            redirectWithError(response, "invalid_request", "Authorization code is missing", state);
-            return;
-        }
+        String ipAddress = getClientIpAddress(exchange);
+        ServerHttpResponse response = exchange.getResponse();
         
         try {
-            // State에서 원본 OAuth 파라미터 추출
-            OAuthParams oauthParams = extractOAuthParamsFromState(state);
-            if (oauthParams == null) {
-                log.warn("Invalid state parameter from IP: {}", ipAddress);
-                redirectWithError(response, "invalid_state", "Invalid state parameter", state);
-                return;
+            // 오류 처리
+            if (error != null && !error.isEmpty()) {
+                log.warn("Kakao OAuth error from IP {}: {}", ipAddress, error);
+                return redirectToFrontend(response, frontendUrl + "/auth/error?provider=kakao&error=" + 
+                    URLEncoder.encode(error, StandardCharsets.UTF_8));
             }
+            
+            if (code == null || code.isEmpty()) {
+                log.warn("Kakao OAuth callback missing code from IP: {}", ipAddress);
+                return redirectToFrontend(response, frontendUrl + "/auth/error?provider=kakao&error=missing_code");
+            }
+            
+            log.info("Processing Kakao OAuth callback from IP: {}", ipAddress);
             
             // Kakao 소셜 로그인 처리
             SocialLoginService.SocialLoginResult loginResult = socialLoginService.processKakaoLogin(code);
             
             if (!loginResult.isSuccess()) {
-                log.warn("Kakao login failed from IP: {}: {}", ipAddress, loginResult.getErrorMessage());
-                
-                // Redis에 실패 시도 기록
-                if (loginResult.getUser() != null && loginResult.getUser().getEmail() != null) {
-                    redisLoginAttemptService.recordFailedAttempt(loginResult.getUser().getEmail(), ipAddress);
-                }
-                
-                redirectWithError(response, "login_failed", loginResult.getErrorMessage(), oauthParams.getOriginalState());
-                return;
+                log.error("Kakao login failed from IP {}: {}", ipAddress, loginResult.getErrorMessage());
+                return redirectToFrontend(response, frontendUrl + "/auth/error?provider=kakao&error=" + 
+                    URLEncoder.encode("login_failed", StandardCharsets.UTF_8));
             }
             
-            // 계정 잠금 확인
-            String email = loginResult.getUser().getEmail();
-            if (redisLoginAttemptService.isAccountLocked(email)) {
-                log.warn("Account locked during Kakao login: {} from IP: {}", email, ipAddress);
-                redirectWithError(response, "account_locked", "Account is temporarily locked", oauthParams.getOriginalState());
-                return;
-            }
+            User user = loginResult.getUser();
             
-            // OAuth Authorization Code 생성
-            String authorizationCode = authorizationCodeService.generateAuthorizationCode(
-                loginResult.getUser().getId(),
-                oauthParams.getClientId(),
-                oauthParams.getRedirectUri(),
-                oauthParams.getScope(),
-                oauthParams.getOriginalState(),
-                oauthParams.getCodeChallenge(),
-                oauthParams.getCodeChallengeMethod()
-            );
+            // JWT 토큰 생성
+            String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), user.getRole().toString());
+            String refreshToken = jwtService.generateRefreshToken(user.getId());
             
-            // 성공 시 실패 카운트 초기화
-            redisLoginAttemptService.recordSuccessfulLogin(email);
+            log.info("Kakao login successful for user: {} from IP: {}", user.getEmail(), ipAddress);
             
-            // 원래 애플리케이션으로 리다이렉트
-            redirectWithSuccess(response, oauthParams.getRedirectUri(), authorizationCode, oauthParams.getOriginalState());
+            // 프론트엔드로 리다이렉트 (토큰 포함)
+            String redirectUrl = frontendUrl + "/auth/success?" + 
+                "access_token=" + URLEncoder.encode(accessToken, StandardCharsets.UTF_8) +
+                "&refresh_token=" + URLEncoder.encode(refreshToken, StandardCharsets.UTF_8) +
+                "&provider=kakao" +
+                (state != null ? "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8) : "");
             
-            log.info("Kakao login successful for user: {} from IP: {}", email, ipAddress);
+            return redirectToFrontend(response, redirectUrl);
             
         } catch (Exception e) {
-            log.error("Kakao login callback failed from IP: {}", ipAddress, e);
-            redirectWithError(response, "server_error", "Internal server error during Kakao login", state);
+            log.error("Kakao OAuth callback error from IP: {}", ipAddress, e);
+            return redirectToFrontend(response, frontendUrl + "/auth/error?provider=kakao&error=" + 
+                URLEncoder.encode("internal_error", StandardCharsets.UTF_8));
         }
     }
     
-    // === Private Helper Methods ===
-    
-    /**
-     * OAuth 파라미터를 State로 인코딩
-     */
-    private String encodeOAuthParams(String originalState, String clientId, String redirectUri, String scope, String codeChallenge, String codeChallengeMethod) {
-        String params = (originalState != null ? originalState : "") + "|" +
-                       clientId + "|" +
-                       redirectUri + "|" +
-                       scope + "|" +
-                       (codeChallenge != null ? codeChallenge : "") + "|" +
-                       (codeChallengeMethod != null ? codeChallengeMethod : "");
+    @GetMapping("/status")
+    @Operation(
+        summary = "소셜 로그인 서비스 상태",
+        description = "소셜 로그인 서비스의 상태와 지원 기능을 확인합니다."
+    )
+    public ResponseEntity<Map<String, Object>> getStatus() {
+        Map<String, Object> status = new HashMap<>();
+        status.put("service", "social-login-service");
+        status.put("status", "healthy");
+        status.put("providers", Map.of(
+            "google", Map.of(
+                "enabled", oauth2Properties.getSocial().getGoogle().getClientId() != null,
+                "auth_url", "/oauth/social/google/auth",
+                "callback_url", "/oauth/social/google/callback"
+            ),
+            "kakao", Map.of(
+                "enabled", oauth2Properties.getSocial().getKakao().getClientId() != null,
+                "auth_url", "/oauth/social/kakao/auth",
+                "callback_url", "/oauth/social/kakao/callback"
+            )
+        ));
+        status.put("frontend_url", frontendUrl);
         
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(params.getBytes(StandardCharsets.UTF_8));
+        return ResponseEntity.ok(status);
     }
     
-    /**
-     * State에서 OAuth 파라미터 추출
-     */
-    private OAuthParams extractOAuthParamsFromState(String state) {
-        if (state == null) {
-            return null;
-        }
-        
-        try {
-            byte[] decodedBytes = Base64.getUrlDecoder().decode(state);
-            String decodedState = new String(decodedBytes, StandardCharsets.UTF_8);
-            String[] parts = decodedState.split("\\|");
-            
-            if (parts.length >= 4) {
-                return OAuthParams.builder()
-                        .originalState(parts[0].isEmpty() ? null : parts[0])
-                        .clientId(parts[1])
-                        .redirectUri(parts[2])
-                        .scope(parts[3])
-                        .codeChallenge(parts.length > 4 && !parts[4].isEmpty() ? parts[4] : null)
-                        .codeChallengeMethod(parts.length > 5 && !parts[5].isEmpty() ? parts[5] : null)
-                        .build();
-            }
-        } catch (Exception e) {
-            log.warn("Failed to decode state parameter: {}", e.getMessage());
-        }
-        
-        return null;
-    }
-    
-    /**
-     * 성공 리다이렉트
-     */
-    private void redirectWithSuccess(HttpServletResponse response, String redirectUri, String code, String state) throws IOException {
-        StringBuilder url = new StringBuilder(redirectUri);
-        url.append(redirectUri.contains("?") ? "&" : "?");
-        url.append("code=").append(URLEncoder.encode(code, StandardCharsets.UTF_8));
-        
-        if (state != null) {
-            url.append("&state=").append(URLEncoder.encode(state, StandardCharsets.UTF_8));
-        }
-        
-        response.sendRedirect(url.toString());
-    }
-    
-    /**
-     * 오류 리다이렉트
-     */
-    private void redirectWithError(HttpServletResponse response, String error, String errorDescription, String state) throws IOException {
-        // 기본 에러 페이지로 리다이렉트 (실제로는 클라이언트 앱의 에러 페이지)
-        StringBuilder url = new StringBuilder("/login?error=");
-        url.append(URLEncoder.encode(error, StandardCharsets.UTF_8));
-        url.append("&error_description=").append(URLEncoder.encode(errorDescription, StandardCharsets.UTF_8));
-        
-        if (state != null) {
-            try {
-                OAuthParams params = extractOAuthParamsFromState(state);
-                if (params != null && params.getRedirectUri() != null) {
-                    url = new StringBuilder(params.getRedirectUri());
-                    url.append(params.getRedirectUri().contains("?") ? "&" : "?");
-                    url.append("error=").append(URLEncoder.encode(error, StandardCharsets.UTF_8));
-                    url.append("&error_description=").append(URLEncoder.encode(errorDescription, StandardCharsets.UTF_8));
-                    
-                    if (params.getOriginalState() != null) {
-                        url.append("&state=").append(URLEncoder.encode(params.getOriginalState(), StandardCharsets.UTF_8));
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to extract redirect URI from state for error redirect: {}", e.getMessage());
-            }
-        }
-        
-        response.sendRedirect(url.toString());
-    }
-    
-    /**
-     * 클라이언트 IP 주소 추출
-     */
-    private String getClientIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
+    private String getClientIpAddress(ServerWebExchange exchange) {
+        String xForwardedFor = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
             return xForwardedFor.split(",")[0].trim();
         }
         
-        String xRealIp = request.getHeader("X-Real-IP");
+        String xRealIp = exchange.getRequest().getHeaders().getFirst("X-Real-IP");
         if (xRealIp != null && !xRealIp.isEmpty()) {
             return xRealIp;
         }
         
-        return request.getRemoteAddr();
+        return exchange.getRequest().getRemoteAddress() != null 
+            ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() 
+            : "unknown";
     }
     
-    /**
-     * OAuth 파라미터 DTO
-     */
-    @lombok.Data
-    @lombok.Builder
-    private static class OAuthParams {
-        private String originalState;
-        private String clientId;
-        private String redirectUri;
-        private String scope;
-        private String codeChallenge;
-        private String codeChallengeMethod;
+    private Mono<Void> redirectToFrontend(ServerHttpResponse response, String url) {
+        response.setStatusCode(HttpStatus.FOUND);
+        response.getHeaders().setLocation(URI.create(url));
+        return response.setComplete();
     }
 }

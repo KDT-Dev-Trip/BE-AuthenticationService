@@ -15,7 +15,6 @@ public class UserLoggedInEvent {
     
     private String userId;
     private String email;
-    private String auth0UserId;
     private String ipAddress;
     private String userAgent;
     private LocalDateTime loginTimestamp;
@@ -23,12 +22,11 @@ public class UserLoggedInEvent {
     private String socialProvider; // 소셜 로그인 제공자
     private long timestamp; // 타임스탬프 추가
     
-    public static UserLoggedInEvent from(String userId, String email, String auth0UserId, 
+    public static UserLoggedInEvent from(String userId, String email, 
                                        String ipAddress, String userAgent, String loginMethod) {
         return UserLoggedInEvent.builder()
                 .userId(userId)
                 .email(email)
-                .auth0UserId(auth0UserId)
                 .ipAddress(ipAddress)
                 .userAgent(userAgent)
                 .loginMethod(loginMethod)

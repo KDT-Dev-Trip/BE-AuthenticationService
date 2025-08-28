@@ -7,13 +7,15 @@ import ac.su.kdt.beauthenticationservice.jwt.JwtService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -35,8 +37,8 @@ public class AuthController {
     
     @GetMapping("/test")
     @Operation(summary = "Authentication Service Test", description = "인증 서비스 동작 확인 및 사용 가능한 엔드포인트 조회")
-    public ResponseEntity<?> testAuth() {
-        return ResponseEntity.ok(Map.of(
+    public Mono<Map<String, Object>> testAuth() {
+        return Mono.just(Map.of(
             "message", "OAuth 2.0 인증 서비스가 정상 작동합니다",
             "timestamp", System.currentTimeMillis(),
             "endpoints", Map.of(
@@ -54,9 +56,9 @@ public class AuthController {
     @Operation(summary = "User Signup", description = "이메일/비밀번호로 새 사용자 회원가입")
     public ResponseEntity<?> signup(
             @Parameter(description = "회원가입 요청 데이터") @RequestBody Map<String, String> request,
-            HttpServletRequest httpRequest) {
+            ServerWebExchange exchange) {
         
-        String ipAddress = getClientIpAddress(httpRequest);
+        String ipAddress = getClientIpAddress(exchange);
         
         try {
             String email = request.get("email");
@@ -110,9 +112,9 @@ public class AuthController {
     @Operation(summary = "User Login", description = "이메일/비밀번호로 로그인")
     public ResponseEntity<?> login(
             @Parameter(description = "로그인 요청 데이터") @RequestBody Map<String, String> request,
-            HttpServletRequest httpRequest) {
+            ServerWebExchange exchange) {
         
-        String ipAddress = getClientIpAddress(httpRequest);
+        String ipAddress = getClientIpAddress(exchange);
         String email = request.get("email");
         String password = request.get("password");
         
@@ -192,9 +194,19 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    @Operation(summary = "Refresh Token", description = "Refresh Token으로 새 Access Token 발급")
+    @Operation(
+        summary = "Refresh Token", 
+        description = """
+                Refresh Token을 사용하여 새로운 Access Token을 발급합니다.
+                Access Token이 만료되었을 때 사용자의 재로그인 없이 새 토큰을 발급할 수 있습니다.
+                """
+    )
     public ResponseEntity<?> refreshToken(
-            @Parameter(description = "Refresh Token 요청") @RequestBody Map<String, String> request) {
+            @Parameter(
+                description = "Refresh Token을 포함한 요청 데이터", 
+                example = "{\"refresh_token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"}"
+            ) 
+            @RequestBody Map<String, String> request) {
         
         try {
             String refreshToken = request.get("refresh_token");
@@ -238,9 +250,18 @@ public class AuthController {
     }
     
     @PostMapping("/password-reset")
+    @Operation(
+        summary = "Password Reset Request", 
+        description = """
+                비밀번호 재설정 요청을 처리합니다.
+                유효한 이메일인 경우 비밀번호 재설정 링크가 이메일로 발송됩니다.
+                보안상 이메일 존재 여부에 관계없이 항상 성공 응늵을 반환합니다.
+                """
+    )
     public ResponseEntity<?> requestPasswordReset(
+            @Parameter(description = "비밀번호 재설정을 요청할 이메일 주소") 
             @RequestBody Map<String, String> request,
-            HttpServletRequest httpRequest) {
+            ServerWebExchange exchange) {
         
         try {
             String email = request.get("email");
@@ -249,7 +270,7 @@ public class AuthController {
                         .body(Map.of("error", "Email is required"));
             }
             
-            String ipAddress = getClientIpAddress(httpRequest);
+            String ipAddress = getClientIpAddress(exchange);
             authService.requestPasswordReset(email, ipAddress);
             
             // 보안상 항상 성공 응답
@@ -266,7 +287,16 @@ public class AuthController {
     }
     
     @PostMapping("/validate")
-    public ResponseEntity<?> validateToken(@RequestBody Map<String, String> request) {
+    @Operation(
+        summary = "JWT Token Validation", 
+        description = """
+                JWT 토큰의 유효성을 검증하고 사용자 정보를 반환합니다.
+                마이크로서비스 간 토큰 검증 및 인가에 사용됩니다.
+                """
+    )
+    public ResponseEntity<?> validateToken(
+        @Parameter(description = "JWT 토큰을 포함한 검증 요청 데이터") 
+        @RequestBody Map<String, String> request) {
         try {
             String token = request.get("token");
             if (token == null || token.isEmpty()) {
@@ -304,7 +334,12 @@ public class AuthController {
     @GetMapping("/me")
     @Operation(summary = "Get Current User", description = "현재 로그인한 사용자 정보 조회")
     public ResponseEntity<?> getCurrentUser(
-            @Parameter(description = "Bearer JWT Token") @RequestHeader("Authorization") String authHeader) {
+            @Parameter(
+                description = "Bearer JWT Token - 'Bearer ' 접두어를 포함한 JWT 토큰", 
+                required = true, 
+                example = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            ) 
+            @RequestHeader("Authorization") String authHeader) {
         try {
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -316,17 +351,17 @@ public class AuthController {
             
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
-                return ResponseEntity.ok(Map.of(
-                    "id", user.getId(),
-                    "email", user.getEmail(),
-                    "name", user.getName(),
-                    "role", user.getRole().toString(),
-                    "tickets", user.getCurrentTickets(),
-                    "emailVerified", user.getEmailVerified(),
-                    "pictureUrl", user.getPictureUrl(),
-                    "isActive", user.getIsActive(),
-                    "socialProvider", user.getSocialProvider()
-                ));
+                Map<String, Object> response = new HashMap<>();
+                response.put("id", user.getId());
+                response.put("email", user.getEmail());
+                response.put("name", user.getName());
+                response.put("role", user.getRole().toString());
+                response.put("tickets", user.getCurrentTickets());
+                response.put("emailVerified", user.getEmailVerified());
+                response.put("pictureUrl", user.getPictureUrl());
+                response.put("isActive", user.getIsActive());
+                response.put("socialProvider", user.getSocialProvider());
+                return ResponseEntity.ok(response);
             } else {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(Map.of("error", "INVALID_TOKEN", "message", "유효하지 않은 토큰입니다"));
@@ -339,13 +374,87 @@ public class AuthController {
         }
     }
     
+    @PostMapping("/sync-users")
+    @Operation(
+        summary = "Sync Users to Other Services", 
+        description = """
+                모든 사용자 데이터를 다른 서비스와 동기화합니다.
+                """
+    )
+    public ResponseEntity<?> syncUsers() {
+        try {
+            // 전체 사용자 동기화 실행
+            int syncedCount = authService.syncAllUsersToServices();
+            
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "사용자 동기화가 완료되었습니다",
+                "syncedCount", syncedCount
+            ));
+            
+        } catch (Exception e) {
+            log.error("User sync failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "SYNC_FAILED", "message", "사용자 동기화 중 오류가 발생했습니다"));
+        }
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "User Logout", description = "사용자 로그아웃 처리")
+    public ResponseEntity<?> logout(
+            @Parameter(description = "로그아웃 요청 데이터") @RequestBody(required = false) Map<String, String> request,
+            @Parameter(
+                description = "Bearer JWT Token - 'Bearer ' 접두어를 포함한 JWT 토큰", 
+                required = true, 
+                example = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            ) 
+            @RequestHeader("Authorization") String authHeader,
+            ServerWebExchange exchange) {
+        
+        try {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "INVALID_HEADER", "message", "유효하지 않은 Authorization 헤더입니다"));
+            }
+            
+            String token = authHeader.substring(7);
+            String ipAddress = getClientIpAddress(exchange);
+            String userAgent = exchange.getRequest().getHeaders().getFirst("User-Agent");
+            String logoutReason = request != null ? request.get("reason") : "USER_LOGOUT";
+            
+            Optional<User> userOpt = authService.getUserFromToken(token);
+            if (userOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "INVALID_TOKEN", "message", "유효하지 않은 토큰입니다"));
+            }
+            
+            User user = userOpt.get();
+            
+            // 로그아웃 처리 및 이벤트 발행
+            authService.logoutUser(user.getId(), "session_" + System.currentTimeMillis(), ipAddress, logoutReason);
+            
+            log.info("User logged out: {} from IP: {}", user.getEmail(), ipAddress);
+            
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "로그아웃이 완료되었습니다"
+            ));
+            
+        } catch (Exception e) {
+            log.error("Logout error", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "INTERNAL_ERROR", "message", "로그아웃 처리 중 오류가 발생했습니다"));
+        }
+    }
+
     @GetMapping("/health")
     @Operation(summary = "Health Check", description = "인증 서비스 헬스체크")
-    public ResponseEntity<?> healthCheck() {
-        return ResponseEntity.ok(Map.of(
+    public Mono<Map<String, Object>> healthCheck() {
+        return Mono.just(Map.of(
             "status", "healthy",
-            "service", "oauth2-authentication-service",
+            "service", "oauth2-authentication-service", 
             "version", "2.0",
+            "deprecated", "Use /api/health instead",
             "features", Map.of(
                 "localAuth", "enabled",
                 "socialLogin", "enabled",
@@ -356,17 +465,20 @@ public class AuthController {
         ));
     }
     
-    private String getClientIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
+    
+    private String getClientIpAddress(ServerWebExchange exchange) {
+        String xForwardedFor = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
             return xForwardedFor.split(",")[0].trim();
         }
         
-        String xRealIp = request.getHeader("X-Real-IP");
+        String xRealIp = exchange.getRequest().getHeaders().getFirst("X-Real-IP");
         if (xRealIp != null && !xRealIp.isEmpty()) {
             return xRealIp;
         }
         
-        return request.getRemoteAddr();
+        return exchange.getRequest().getRemoteAddress() != null 
+            ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() 
+            : "unknown";
     }
 }

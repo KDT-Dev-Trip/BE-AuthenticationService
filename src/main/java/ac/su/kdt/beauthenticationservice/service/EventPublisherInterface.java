@@ -1,8 +1,6 @@
 package ac.su.kdt.beauthenticationservice.service;
 
-import ac.su.kdt.beauthenticationservice.model.dto.PasswordResetRequestedEvent;
-import ac.su.kdt.beauthenticationservice.model.dto.UserLoggedInEvent;
-import ac.su.kdt.beauthenticationservice.model.dto.UserSignedUpEvent;
+import ac.su.kdt.beauthenticationservice.model.dto.*;
 
 /**
  * 이벤트 발행 서비스 인터페이스
@@ -10,9 +8,19 @@ import ac.su.kdt.beauthenticationservice.model.dto.UserSignedUpEvent;
  */
 public interface EventPublisherInterface {
     
+    // 기존 이벤트
     void publishUserSignedUpEvent(UserSignedUpEvent event);
     void publishUserLoggedInEvent(UserLoggedInEvent event);
     void publishPasswordResetRequestedEvent(PasswordResetRequestedEvent event);
+    
+    // 새로운 이벤트
+    void publishUserLoggedOutEvent(UserLoggedOutEvent event);
+    void publishLoginFailedEvent(LoginFailedEvent event);
+    void publishAccountLockedEvent(AccountLockedEvent event);
+    void publishPasswordChangedEvent(PasswordChangedEvent event);
+    void publishPasswordResetCompletedEvent(PasswordResetCompletedEvent event);
+    void publishTeamCreatedEvent(TeamCreatedEvent event);
+    void publishTeamMemberAddedEvent(TeamMemberAddedEvent event);
     
     // 편의 메서드들
     void publishUserSignedUp(String userId, String email, String ipAddress);

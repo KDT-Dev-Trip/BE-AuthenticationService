@@ -270,4 +270,151 @@ public class EmailService {
             </html>
             """, userName, LocalDateTime.now(), ipAddress, userAgent);
     }
+    
+    /**
+     * 결제 실패 보안 이메일 발송
+     */
+    public void sendPaymentFailureSecurityEmail(String email, String failureReason, Integer retryCount, Double failedAmount) {
+        log.info("📧 [EMAIL_SERVICE] Sending payment failure security email to: {}", maskEmail(email));
+        log.info("📧 Failure details - Reason: {}, Retry: {}, Amount: {}", failureReason, retryCount, failedAmount);
+        
+        String subject = "결제 실패 보안 알림 - DevOps 교육 플랫폼";
+        String htmlContent = buildPaymentFailureEmailContent(failureReason, retryCount, failedAmount);
+        
+        sendEmail(email, subject, htmlContent);
+    }
+    
+    /**
+     * 계정 정지 이메일 발송
+     */
+    public void sendAccountSuspensionEmail(String email, String reason) {
+        log.warn("📧 [EMAIL_SERVICE] Sending account suspension email to: {}", maskEmail(email));
+        log.warn("📧 Suspension reason: {}", reason);
+        
+        String subject = "계정 정지 안내 - DevOps 교육 플랫폼";
+        String htmlContent = buildAccountSuspensionEmailContent(reason);
+        
+        sendEmail(email, subject, htmlContent);
+    }
+    
+    /**
+     * 업그레이드 환영 이메일 발송
+     */
+    public void sendUpgradeWelcomeEmail(String email, String newPlan) {
+        log.info("📧 [EMAIL_SERVICE] Sending upgrade welcome email to: {}", maskEmail(email));
+        log.info("📧 New plan: {}", newPlan);
+        
+        String subject = newPlan + " 플랜 업그레이드 축하 - DevOps 교육 플랫폼";
+        String htmlContent = buildUpgradeWelcomeEmailContent(newPlan);
+        
+        sendEmail(email, subject, htmlContent);
+    }
+    
+    /**
+     * 잔액 부족 마케팅 이메일 발송
+     */
+    public void sendLowBalanceMarketingEmail(String email, Integer currentBalance, String subscriptionPlan, Integer suggestedRechargeAmount) {
+        log.info("📧 [EMAIL_SERVICE] Sending low balance marketing email to: {}", maskEmail(email));
+        log.info("📧 Balance: {}, Plan: {}, Suggested: {}", currentBalance, subscriptionPlan, suggestedRechargeAmount);
+        
+        String subject = "티켓 충전 및 플랜 업그레이드 제안 - DevOps 교육 플랫폼";
+        String htmlContent = buildLowBalanceMarketingEmailContent(currentBalance, subscriptionPlan, suggestedRechargeAmount);
+        
+        sendEmail(email, subject, htmlContent);
+    }
+    
+    private String buildPaymentFailureEmailContent(String failureReason, Integer retryCount, Double failedAmount) {
+        return String.format("""
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                <h2 style="color: #dc3545;">⚠️ 결제 실패 알림</h2>
+                <p>구독 결제 처리 중 문제가 발생했습니다.</p>
+                <div style="background-color: #f8d7da; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p><strong>실패 정보:</strong></p>
+                    <ul>
+                        <li>실패 사유: %s</li>
+                        <li>재시도 횟수: %d회</li>
+                        <li>결제 금액: %.0f원</li>
+                    </ul>
+                </div>
+                <p>결제 방법을 확인하고 다시 시도해 주세요.</p>
+            </div>
+            """, getFailureReasonKorean(failureReason), retryCount, failedAmount);
+    }
+    
+    private String buildAccountSuspensionEmailContent(String reason) {
+        return String.format("""
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                <h2 style="color: #dc3545;">🚫 계정 정지 안내</h2>
+                <p>귀하의 계정이 일시적으로 정지되었습니다.</p>
+                <div style="background-color: #f8d7da; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p><strong>정지 사유:</strong> %s</p>
+                </div>
+                <p>계정 복구를 위해 고객센터로 연락해 주세요.</p>
+            </div>
+            """, reason);
+    }
+    
+    private String buildUpgradeWelcomeEmailContent(String newPlan) {
+        return String.format("""
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                <h2 style="color: #28a745;">🎉 플랜 업그레이드 축하</h2>
+                <p>%s 플랜으로 업그레이드해 주셔서 감사합니다!</p>
+                <div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p><strong>새로운 기능들을 확인해보세요:</strong></p>
+                    <ul>
+                        <li>더 많은 실습 환경</li>
+                        <li>우선 지원</li>
+                        <li>고급 기능 액세스</li>
+                    </ul>
+                </div>
+            </div>
+            """, newPlan);
+    }
+    
+    private String buildLowBalanceMarketingEmailContent(Integer currentBalance, String subscriptionPlan, Integer suggestedRechargeAmount) {
+        return String.format("""
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                <h2 style="color: #ffc107;">⚡ 티켓 충전 제안</h2>
+                <p>현재 티켓 잔액이 부족합니다.</p>
+                <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <ul>
+                        <li>현재 잔액: %d개</li>
+                        <li>현재 플랜: %s</li>
+                        <li>권장 충전량: %d개</li>
+                    </ul>
+                </div>
+                <p>상위 플랜으로 업그레이드하면 더 많은 혜택을 받으실 수 있습니다!</p>
+            </div>
+            """, currentBalance, subscriptionPlan, suggestedRechargeAmount);
+    }
+    
+    private String getFailureReasonKorean(String failureReason) {
+        return switch (failureReason) {
+            case "PAYMENT_FAILED" -> "결제 실패";
+            case "CARD_EXPIRED" -> "카드 만료";
+            case "INSUFFICIENT_FUNDS" -> "잔액 부족";
+            case "CARD_DECLINED" -> "카드 거부";
+            default -> failureReason;
+        };
+    }
+    
+    /**
+     * 이메일 마스킹
+     */
+    private String maskEmail(String email) {
+        if (email == null || !email.contains("@")) {
+            return email;
+        }
+        
+        String[] parts = email.split("@");
+        String username = parts[0];
+        String domain = parts[1];
+        
+        if (username.length() <= 2) {
+            return username + "@" + domain;
+        }
+        
+        String maskedUsername = username.substring(0, 2) + "*".repeat(username.length() - 2);
+        return maskedUsername + "@" + domain;
+    }
 }

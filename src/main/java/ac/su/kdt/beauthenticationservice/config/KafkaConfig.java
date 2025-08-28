@@ -45,10 +45,10 @@ public class KafkaConfig {
         return new KafkaTemplate<>(producerFactory());
     }
     
-    // 토픽 자동 생성 설정
+    // MSA 공유 Kafka 토픽 설정 (서비스명 prefix 추가)
     @Bean
     public NewTopic userSignedUpTopic() {
-        return TopicBuilder.name("user.signed-up")
+        return TopicBuilder.name("auth.user-signed-up")  // MSA 네이밍: {service}.{event}
                 .partitions(3)
                 .replicas(1)
                 .build();
@@ -56,7 +56,7 @@ public class KafkaConfig {
     
     @Bean
     public NewTopic userLoggedInTopic() {
-        return TopicBuilder.name("user.logged-in")
+        return TopicBuilder.name("auth.user-logged-in")  // MSA 네이밍: {service}.{event}
                 .partitions(3)
                 .replicas(1)
                 .build();
@@ -64,9 +64,36 @@ public class KafkaConfig {
     
     @Bean
     public NewTopic passwordResetRequestedTopic() {
+        return TopicBuilder.name("auth.password-reset-requested")  // MSA 네이밍: {service}.{event}
+                .partitions(1)
+                .replicas(1)
+                .build();
+    }
+    
+    // 기존 토픽명 (호환성 유지용) - 필요시 주석 해제
+    /*
+    @Bean
+    public NewTopic legacyUserSignedUpTopic() {
+        return TopicBuilder.name("user.signed-up")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+    
+    @Bean 
+    public NewTopic legacyUserLoggedInTopic() {
+        return TopicBuilder.name("user.logged-in")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+    
+    @Bean
+    public NewTopic legacyPasswordResetTopic() {
         return TopicBuilder.name("user.password-reset-requested")
                 .partitions(1)
                 .replicas(1)
                 .build();
     }
+    */
 }

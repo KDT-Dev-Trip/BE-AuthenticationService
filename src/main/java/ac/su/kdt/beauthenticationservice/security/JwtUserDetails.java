@@ -17,9 +17,9 @@ public class JwtUserDetails {
     private String rawToken;
     
     /**
-     * Auth0 User ID를 반환합니다.
+     * User ID를 반환합니다.
      */
-    public String getAuth0UserId() {
+    public String getUserId() {
         return userId;
     }
     
