@@ -35,39 +35,42 @@ public class AuthSecurityService {
     }
     
     /**
-     * 사용자 역할/권한 업데이트
+     * 사용자 현재 구독 플랜 정보 업데이트
      */
-    public void updateUserRole(String authUserId, String planName) {
-        log.info("🔒 [AUTH_SECURITY] Updating user role for plan: authUserId={}, plan={}", authUserId, planName);
+    public void updateUserCurrentPlan(String authUserId, String planId) {
+        log.info("🔒 [AUTH_SECURITY] Updating user current plan: authUserId={}, planId={}", authUserId, planId);
         
         // 실제 구현에서는 다음 작업을 수행:
-        // 1. 플랜에 따른 역할(ROLE) 업데이트
-        // 2. 권한(Authority) 목록 업데이트
-        // 3. JWT 토큰 갱신 필요 플래그 설정
+        // 1. User 엔티티의 currentPlanId 필드 업데이트
+        // 2. 플랜 변경 이력 로깅
+        // 3. 플랜 동기화 완료 플래그 설정
+        // 주의: Role(USER/ADMIN)이나 Authority는 변경하지 않음
     }
     
     /**
-     * 업그레이드 권한 부여
+     * 업그레이드 시 추가 설정
      */
-    public void grantUpgradePermissions(String authUserId, String newPlan) {
-        log.info("🔒 [AUTH_SECURITY] Granting upgrade permissions: authUserId={}, plan={}", authUserId, newPlan);
+    public void applyUpgradeSettings(String authUserId, String newPlanId) {
+        log.info("🔒 [AUTH_SECURITY] Applying upgrade settings: authUserId={}, planId={}", authUserId, newPlanId);
         
         // 실제 구현에서는 다음 작업을 수행:
-        // 1. 새 플랜에 해당하는 추가 권한 부여
-        // 2. 기능 접근 권한 확대
-        // 3. API 레이트 리밋 증가
+        // 1. 업그레이드 알림 설정
+        // 2. 새 플랜 기능 안내 준비
+        // 3. 업그레이드 이력 로깅
+        // 주의: 실제 권한은 애플리케이션 레벨에서 currentPlanId를 기반으로 처리
     }
     
     /**
-     * 다운그레이드 권한 제한
+     * 다운그레이드 시 추가 설정
      */
-    public void restrictDowngradePermissions(String authUserId, String newPlan) {
-        log.info("🔒 [AUTH_SECURITY] Restricting permissions for downgrade: authUserId={}, plan={}", authUserId, newPlan);
+    public void applyDowngradeSettings(String authUserId, String newPlanId) {
+        log.info("🔒 [AUTH_SECURITY] Applying downgrade settings: authUserId={}, planId={}", authUserId, newPlanId);
         
         // 실제 구현에서는 다음 작업을 수행:
-        // 1. 권한 축소
-        // 2. 기능 접근 제한
-        // 3. API 레이트 리밋 감소
+        // 1. 다운그레이드 알림 설정
+        // 2. 이전 플랜 기능 사용 불가 안내
+        // 3. 다운그레이드 이력 로깅
+        // 주의: 실제 기능 제한은 애플리케이션 레벨에서 currentPlanId를 기반으로 처리
     }
     
     /**

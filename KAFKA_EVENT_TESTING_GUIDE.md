@@ -98,9 +98,9 @@ curl -X POST http://localhost:8081/api/payments/toss/confirm \
 ```
 
 **검증 포인트**:
-- [ ] Payment Service: 결제 완료 처리
-- [ ] Auth Service: 사용자 권한 업데이트 (BASIC 플랜)
+- [ ] Payment Service: 결제 완료 처리  
 - [ ] User Service: 사용자 구독 상태 변경
+- [ ] Auth Service: 직접적인 변경 없음 (단순 결제 완료 이벤트는 처리하지 않음)
 
 #### 2.2 구독 업그레이드 이벤트 테스트
 

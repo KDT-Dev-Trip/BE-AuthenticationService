@@ -84,7 +84,7 @@ spring.kafka.consumer.group-id=user-mgmt-service-group
 #### Producer (발행하는 이벤트)
 | Topic | Event Type | API Endpoint | Payload | 수신 서비스 | 설명 |
 |-------|------------|--------------|---------|------------|------|
-| `payment-events` | PaymentCompletedEvent | `POST /api/payments/toss/confirm` | paymentId, userId, amount, planType, timestamp | Auth, User | 결제 완료 이벤트 |
+| `payment-events` | PaymentCompletedEvent | `POST /api/payments/toss/confirm` | paymentId, userId, amount, planType, timestamp | User | 결제 완료 이벤트 (Auth에서는 처리하지 않음) |
 | `payment-events` | PaymentFailedEvent | `POST /api/payments/toss/confirm` | paymentId, userId, failureReason, timestamp | Auth, User | 결제 실패 이벤트 |
 | `subscription-events` | PlanUpgradedEvent | `POST /api/payments/upgrade` | userId, fromPlan, toPlan, timestamp | Auth, User | 플랜 업그레이드 |
 | `subscription-events` | PlanDowngradedEvent | `POST /api/payments/downgrade` | userId, fromPlan, toPlan, timestamp | Auth, User | 플랜 다운그레이드 |
@@ -236,9 +236,10 @@ sequenceDiagram
     P->>P: Confirm Payment
     P->>K: Publish PaymentCompletedEvent to payment-events
     P->>K: Publish PlanUpgradedEvent to subscription-events
-    K->>A: Consume payment-events
+    K->>UM: Consume payment-events (Auth에서는 처리하지 않음)
+    K->>A: Consume subscription-events (플랜 변경시에만)
     K->>UM: Consume subscription-events
-    A->>A: Update User Role/Permissions
+    A->>A: Update Current Plan ID (Role/권한 변경 없음)
     UM->>UM: Update User Subscription Status
     P->>U: Return Payment Success
 ```

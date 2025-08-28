@@ -81,16 +81,16 @@ public class PaymentEventListener {
                 authUserId, email, oldPlan, newPlan, changeReason);
         
         try {
-            // 1. 사용자 역할/권한 업데이트
-            authSecurityService.updateUserRole(authUserId, newPlan);
+            // 1. 사용자 현재 플랜 정보 업데이트 (currentPlanId만 변경)
+            authSecurityService.updateUserCurrentPlan(authUserId, newPlan);
             
-            // 2. 업그레이드/다운그레이드에 따른 권한 조정
+            // 2. 업그레이드/다운그레이드에 따른 추가 설정
             boolean isUpgrade = isUpgrade(oldPlan, newPlan);
             if (isUpgrade) {
-                authSecurityService.grantUpgradePermissions(authUserId, newPlan);
+                authSecurityService.applyUpgradeSettings(authUserId, newPlan);
                 emailService.sendUpgradeWelcomeEmail(email, newPlan);
             } else {
-                authSecurityService.restrictDowngradePermissions(authUserId, newPlan);
+                authSecurityService.applyDowngradeSettings(authUserId, newPlan);
             }
             
             // 3. 결제 복구 (이전에 실패했다면)
