@@ -12,11 +12,15 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 사용자 회원가입 완료 이벤트
+// 사용자 회원가입 완료 이벤트는 사용자가 회원가입을 완료할 때 발생하는 이벤트입니다.
+// 이벤트는 회원가입 시간, 회원가입 방법, 회원가입 IP 주소, 사용자 에이전트 등의 정보를 포함합니다.
+
 public class UserSignedUpEvent {
     
     @JsonProperty("event_type")
     @Builder.Default
-    private String eventType = "auth.user-signed-up";
+    private String eventType = "user.signed-up";
     
     @JsonProperty("event_id")
     private String eventId;

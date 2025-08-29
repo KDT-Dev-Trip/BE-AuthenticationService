@@ -110,13 +110,16 @@
 
 package ac.su.kdt.beauthenticationservice.security;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.web.server.authentication.AuthenticationWebFilter;
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
@@ -127,13 +130,14 @@ import java.util.List;
 
 @Configuration
 @EnableWebFluxSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
-    
-    // 🔑 JWT 인증은 JwtGlobalFilter에서 처리하므로 JWT 관련 의존성 불필요
+
+    private final JwtServerAuthenticationConverter jwtAuthenticationConverter;
+    private final JwtReactiveAuthenticationManager jwtReactiveAuthenticationManager;
 
     @Bean
     public SecurityWebFilterChain filterChain(ServerHttpSecurity http) {
-        System.out.println("🔥 SecurityConfig - Creating SecurityWebFilterChain with JWT authentication");
         return http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(ServerHttpSecurity.CsrfSpec::disable)
@@ -141,8 +145,21 @@ public class SecurityConfig {
             .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
             .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
             .authorizeExchange(exchanges -> exchanges
-                // 🔓 모든 요청 허용 - JWT 검증은 JwtGlobalFilter에서 처리
-                .anyExchange().permitAll()
+                // 1. Authenticated paths first
+                .pathMatchers("/gateway/**").authenticated() // Gateway requests require JWT authentication
+                .pathMatchers("/api/protected/**").authenticated() // Protected APIs require JWT authentication
+                
+                // 2. Public paths that do not require authentication
+                .pathMatchers("/auth/**").permitAll() // Authentication endpoints (login, register)
+                .pathMatchers("/actuator/**").permitAll() // Actuator endpoints for health checks
+                .pathMatchers("/health").permitAll()
+                .pathMatchers("/", "/api/**").permitAll() // Other public API endpoints
+                .pathMatchers("/test-login.html", "/static/**").permitAll() // Static resources
+                .pathMatchers("/favicon.ico").permitAll()
+                
+                // 3. A catch-all rule for all other paths. 
+                // For security, it's best to require authentication for all other routes by default.
+                .anyExchange().authenticated() 
             )
             // Configure custom exception handling for authentication and access denied
             .exceptionHandling(exceptions -> exceptions
@@ -163,10 +180,17 @@ public class SecurityConfig {
                     return response.writeWith(reactor.core.publisher.Mono.just(buffer));
                 })
             )
-            // 🔑 JWT 인증은 JwtGlobalFilter에서 처리하므로 별도 필터 불필요
+            // Add the JWT authentication filter at the correct position in the filter chain
+            .addFilterAt(createJwtAuthenticationWebFilter(), SecurityWebFiltersOrder.AUTHENTICATION)
             .build();
     }
 
+    private AuthenticationWebFilter createJwtAuthenticationWebFilter() {
+        AuthenticationWebFilter authenticationWebFilter =
+            new AuthenticationWebFilter(jwtReactiveAuthenticationManager);
+        authenticationWebFilter.setServerAuthenticationConverter(jwtAuthenticationConverter);
+        return authenticationWebFilter;
+    }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {

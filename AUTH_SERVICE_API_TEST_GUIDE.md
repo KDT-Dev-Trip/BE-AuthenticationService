@@ -4,7 +4,7 @@
 
 ### Base URL
 ```
-http://localhost:8081
+http://localhost:8080
 ```
 
 ### 기본 헤더 설정
@@ -33,10 +33,24 @@ http://localhost:8081
 ```http
 GET /
 ```
+**응답 예시:**
+```json
+{
+  "message": "Authentication Service is running",
+  "status": "active"
+}
+```
 
 #### 1.2 헬스체크
 ```http
 GET /health
+```
+**응답 예시:**
+```json
+{
+  "status": "UP",
+  "timestamp": "2024-08-28T21:00:00Z"
+}
 ```
 
 #### 1.3 앱 헬스체크
@@ -65,23 +79,12 @@ POST /auth/signup
 **요청 본문:**
 ```json
 {
-  "email": "user@example.com",
+  "authUserId": "user123",
   "password": "SecurePass123!",
-  "name": "홍길동"
-}
-```
-**응답 예시:**
-```json
-{
-  "success": true,
-  "message": "회원가입이 완료되었습니다",
-  "user": {
-    "id": 1,
-    "email": "user@example.com",
-    "name": "홍길동",
-    "role": "USER",
-    "emailVerified": false
-  }
+  "email": "user@example.com",
+  "nickname": "TestUser",
+  "birthDate": "1990-01-01",
+  "preferTripType": "ADVENTURE"
 }
 ```
 
@@ -92,7 +95,7 @@ POST /auth/login
 **요청 본문:**
 ```json
 {
-  "email": "user@example.com",
+  "authUserId": "user123",
   "password": "SecurePass123!"
 }
 ```
@@ -100,17 +103,11 @@ POST /auth/login
 ```json
 {
   "success": true,
-  "message": "로그인이 완료되었습니다",
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": 1,
-    "email": "user@example.com",
-    "name": "홍길동",
-    "role": "USER",
-    "tickets": 10,
-    "emailVerified": false
-  }
+  "authUserId": "user123",
+  "userId": 1,
+  "email": "user@example.com"
 }
 ```
 
@@ -121,15 +118,7 @@ POST /auth/refresh
 **요청 본문:**
 ```json
 {
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-**응답 예시:**
-```json
-{
-  "success": true,
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "message": "새 Access Token이 발급되었습니다"
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```
 
@@ -140,14 +129,8 @@ POST /auth/password-reset
 **요청 본문:**
 ```json
 {
+  "authUserId": "user123",
   "email": "user@example.com"
-}
-```
-**응답 예시:**
-```json
-{
-  "success": true,
-  "message": "If the email exists, a password reset link has been sent"
 }
 ```
 
@@ -155,19 +138,10 @@ POST /auth/password-reset
 ```http
 POST /auth/validate
 ```
-**요청 본문:**
+**헤더:**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-**응답 예시:**
-```json
-{
-  "valid": true,
-  "userId": 1,
-  "email": "user@example.com",
-  "role": "USER"
+  "Authorization": "Bearer {JWT_TOKEN}"
 }
 ```
 
@@ -181,20 +155,6 @@ GET /auth/me
   "Authorization": "Bearer {JWT_TOKEN}"
 }
 ```
-**응답 예시:**
-```json
-{
-  "id": 1,
-  "email": "user@example.com",
-  "name": "홍길동",
-  "role": "USER",
-  "tickets": 10,
-  "emailVerified": false,
-  "pictureUrl": null,
-  "isActive": true,
-  "socialProvider": null
-}
-```
 
 #### 2.7 로그아웃
 ```http
@@ -206,30 +166,16 @@ POST /auth/logout
   "Authorization": "Bearer {JWT_TOKEN}"
 }
 ```
-**요청 본문 (선택사항):**
-```json
-{
-  "reason": "USER_LOGOUT"
-}
-```
-**응답 예시:**
-```json
-{
-  "success": true,
-  "message": "로그아웃이 완료되었습니다"
-}
-```
 
 #### 2.8 사용자 동기화
 ```http
 POST /auth/sync-users
 ```
-**응답 예시:**
+**요청 본문:**
 ```json
 {
-  "success": true,
-  "message": "사용자 동기화가 완료되었습니다",
-  "syncedCount": 42
+  "userIds": [1, 2, 3],
+  "authUserIds": ["user123", "user456", "user789"]
 }
 ```
 
@@ -237,41 +183,10 @@ POST /auth/sync-users
 ```http
 GET /auth/test
 ```
-**응답 예시:**
-```json
-{
-  "message": "OAuth 2.0 인증 서비스가 정상 작동합니다",
-  "timestamp": 1693392000000,
-  "endpoints": {
-    "POST /auth/signup": "이메일/비밀번호 회원가입",
-    "POST /auth/login": "이메일/비밀번호 로그인",
-    "POST /auth/validate": "JWT 토큰 검증",
-    "POST /auth/password-reset": "비밀번호 재설정",
-    "GET /oauth/authorize": "OAuth 2.0 Authorization Code 발급",
-    "POST /oauth/token": "OAuth 2.0 Access Token 교환"
-  }
-}
-```
 
 #### 2.10 Auth 헬스체크
 ```http
 GET /auth/health
-```
-**응답 예시:**
-```json
-{
-  "status": "healthy",
-  "service": "oauth2-authentication-service",
-  "version": "2.0",
-  "deprecated": "Use /api/health instead",
-  "features": {
-    "localAuth": "enabled",
-    "socialLogin": "enabled",
-    "oauth2": "enabled",
-    "redisRateLimit": "enabled"
-  },
-  "timestamp": 1693392000000
-}
 ```
 
 ---
@@ -311,19 +226,16 @@ GET /oauth/social/status
 ```http
 POST /sso/upgrade
 ```
+**헤더:**
+```json
+{
+  "Authorization": "Bearer {JWT_TOKEN}"
+}
+```
 **요청 본문:**
 ```json
 {
-  "jwt_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-**응답 예시:**
-```json
-{
-  "success": true,
-  "sso_token": "SSO_TOKEN_STRING",
-  "message": "JWT successfully upgraded to SSO token",
-  "expires_in": 28800
+  "appId": "travel-app-001"
 }
 ```
 
@@ -334,7 +246,8 @@ POST /sso/validate
 **요청 본문:**
 ```json
 {
-  "sso_token": "SSO_TOKEN_STRING"
+  "ssoToken": "SSO_TOKEN_STRING",
+  "appId": "travel-app-001"
 }
 ```
 
@@ -345,15 +258,22 @@ POST /sso/register-app
 **요청 본문:**
 ```json
 {
-  "app_id": "travel-app-001",
-  "app_name": "Travel Planning Service",
-  "redirect_uri": "https://travel-app.com/callback"
+  "appId": "travel-app-002",
+  "appName": "Travel Planning Service",
+  "redirectUri": "https://travel-app.com/callback",
+  "description": "여행 계획 서비스"
 }
 ```
 
 #### 4.4 SSO 세션 조회
 ```http
-GET /sso/session?sso_token=SSO_TOKEN_STRING
+GET /sso/session
+```
+**헤더:**
+```json
+{
+  "X-SSO-Token": "SSO_TOKEN_STRING"
+}
 ```
 
 #### 4.5 SSO 로그아웃
@@ -363,7 +283,7 @@ POST /sso/logout
 **요청 본문:**
 ```json
 {
-  "sso_token": "SSO_TOKEN_STRING"
+  "ssoToken": "SSO_TOKEN_STRING"
 }
 ```
 
@@ -386,20 +306,6 @@ GET /api/protected/profile
   "Authorization": "Bearer {JWT_TOKEN}"
 }
 ```
-**응답 예시:**
-```json
-{
-  "user_id": 1,
-  "email": "user@example.com",
-  "authenticated_at": "2024-08-28T21:00:00",
-  "authorities": ["ROLE_USER"],
-  "name": "홍길동",
-  "current_tickets": 10,
-  "role": "USER",
-  "is_active": true,
-  "email_verified": false
-}
-```
 
 #### 5.2 대시보드 조회
 ```http
@@ -409,21 +315,6 @@ GET /api/protected/dashboard
 ```json
 {
   "Authorization": "Bearer {JWT_TOKEN}"
-}
-```
-**응답 예시:**
-```json
-{
-  "welcome_message": "안녕하세요, user@example.com님!",
-  "last_login": "2024-08-28T21:00:00",
-  "available_features": [
-    "DevOps 워크플로우 관리",
-    "실습 환경 프로비저닝",
-    "AI 기반 추천 시스템",
-    "학습 진도 추적"
-  ],
-  "system_status": "정상 운영",
-  "user_permissions": ["ROLE_USER"]
 }
 ```
 
@@ -440,17 +331,9 @@ POST /api/protected/tickets/use
 **요청 본문:**
 ```json
 {
-  "purpose": "실습 환경 생성"
-}
-```
-**응답 예시:**
-```json
-{
-  "message": "티켓이 성공적으로 사용되었습니다",
-  "purpose": "실습 환경 생성",
-  "used_at": "2024-08-28T21:00:00",
-  "user_email": "user@example.com",
-  "remaining_tickets": "조회 중..."
+  "ticketCount": 1,
+  "usageType": "MISSION_ATTEMPT",
+  "missionId": "mission-001"
 }
 ```
 
@@ -464,16 +347,6 @@ GET /api/protected/health-check
   "Authorization": "Bearer {JWT_TOKEN}"
 }
 ```
-**응답 예시:**
-```json
-{
-  "status": "authenticated",
-  "timestamp": "2024-08-28T21:00:00",
-  "user_id": 1,
-  "user_email": "user@example.com",
-  "authorities": ["ROLE_USER"]
-}
-```
 
 ---
 
@@ -483,13 +356,10 @@ GET /api/protected/health-check
 ```http
 GET /admin/login-attempts/stats
 ```
-**응답 예시:**
+**헤더:**
 ```json
 {
-  "totalAccounts": 100,
-  "lockedAccounts": 3,
-  "recentFailedAttempts": 15,
-  "suspiciousIPs": ["192.168.1.100", "10.0.0.5"]
+  "Authorization": "Bearer {ADMIN_JWT_TOKEN}"
 }
 ```
 
@@ -501,32 +371,20 @@ GET /admin/account/{email}/lock-info
 ```http
 GET /admin/account/user@example.com/lock-info
 ```
-**응답 예시:**
-```json
-{
-  "email": "user@example.com",
-  "isLocked": true,
-  "failedAttempts": 5,
-  "lockExpiresAt": "2024-08-28T22:00:00",
-  "lastFailedAttempt": "2024-08-28T21:30:00"
-}
-```
 
 #### 6.3 계정 잠금 해제
 ```http
-POST /admin/account/{email}/unlock?adminUser=admin
+POST /admin/account/{email}/unlock
 ```
 **예시:**
 ```http
-POST /admin/account/user@example.com/unlock?adminUser=admin
+POST /admin/account/user@example.com/unlock
 ```
-**응답 예시:**
+**요청 본문:**
 ```json
 {
-  "status": "success",
-  "message": "계정 잠금이 해제되었습니다.",
-  "email": "user@example.com",
-  "admin_user": "admin"
+  "reason": "관리자 수동 해제",
+  "adminNote": "사용자 요청에 의한 해제"
 }
 ```
 
@@ -560,13 +418,14 @@ GET /admin/accounts/all
 GET /admin/accounts/overview
 ```
 
-#### 6.10 사용자 재동기화 (전체)
+#### 6.10 사용자 재동기화
 ```http
 POST /admin/users/resync
 ```
 **요청 본문:**
 ```json
 {
+  "authUserIds": ["user123", "user456"],
   "forceSync": true
 }
 ```
@@ -586,7 +445,7 @@ POST /admin/users/123/resync
 
 #### 7.1 JWT 토큰 생성
 ```http
-GET /test/jwt-token?email=test@example.com&role=USER
+GET /test/jwt-token?authUserId=testuser&email=test@example.com
 ```
 
 ---
@@ -594,14 +453,15 @@ GET /test/jwt-token?email=test@example.com&role=USER
 ## 🔐 인증 플로우 테스트 시나리오
 
 ### 시나리오 1: 일반 회원가입 및 로그인
-1. `POST /auth/signup` - 회원가입 (email, password, name)
-2. `POST /auth/login` - 로그인 (email, password)
-3. `GET /auth/me` - 내 정보 확인 (JWT 토큰 필요)
-4. `POST /auth/logout` - 로그아웃 (JWT 토큰 필요)
+1. `POST /auth/signup` - 회원가입
+2. `POST /auth/login` - 로그인
+3. `GET /auth/me` - 내 정보 확인
+4. `POST /auth/logout` - 로그아웃
 
 ### 시나리오 2: 소셜 로그인
 1. `GET /oauth/social/google/auth` - Google 로그인 시작
 2. Google 로그인 진행
+
 3. `GET /oauth/social/google/callback` - 콜백 처리
 4. `GET /oauth/social/status` - 로그인 상태 확인
 
@@ -666,7 +526,7 @@ GET /test/jwt-token?email=test@example.com&role=USER
 # 로그인
 curl -X POST http://localhost:8081/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"SecurePass123!"}'
+  -d '{"authUserId":"user123","password":"SecurePass123!"}'
 
 # 헤더와 함께 프로필 조회
 curl -X GET http://localhost:8081/api/protected/profile \
@@ -677,7 +537,7 @@ curl -X GET http://localhost:8081/api/protected/profile \
 ```bash
 # 로그인
 http POST localhost:8081/auth/login \
-  email=user@example.com \
+  authUserId=user123 \
   password=SecurePass123!
 
 # 프로필 조회
@@ -690,10 +550,10 @@ http GET localhost:8081/api/protected/profile \
 ## ⚠️ 주의사항
 
 1. **JWT 토큰 만료**: Access Token은 15분, Refresh Token은 7일 유효
-2. **로그인 시도 제한**: 5회 실패 시 계정 잠금 (1시간)
+2. **로그인 시도 제한**: 5회 실패 시 계정 잠금 (30분)
 3. **관리자 API**: ADMIN 권한이 있는 계정만 접근 가능
 4. **소셜 로그인**: Google/Kakao 개발자 콘솔 설정 필요
-5. **SSO**: 토큰은 8시간 유효
+5. **SSO**: 앱 등록 후 사용 가능
 6. **개발 환경**: `/test` 엔드포인트는 프로덕션에서 비활성화
 
 ---
@@ -708,9 +568,9 @@ http GET localhost:8081/api/protected/profile \
 - 계정 권한 확인 (일반 사용자 vs 관리자)
 - 계정 잠금 상태 확인
 
-### 423 Locked
-- 계정이 잠긴 상태 (로그인 5회 실패)
-- 1시간 후 자동 해제 또는 관리자 수동 해제 필요
+### 429 Too Many Requests
+- Rate Limiting 적용됨 (분당 60회)
+- 잠시 후 재시도
 
 ### 500 Internal Server Error
 - 서버 로그 확인
