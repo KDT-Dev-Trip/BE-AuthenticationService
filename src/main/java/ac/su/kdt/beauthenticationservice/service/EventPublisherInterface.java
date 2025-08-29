@@ -19,8 +19,6 @@ public interface EventPublisherInterface {
     void publishAccountLockedEvent(AccountLockedEvent event);
     void publishPasswordChangedEvent(PasswordChangedEvent event);
     void publishPasswordResetCompletedEvent(PasswordResetCompletedEvent event);
-    void publishTeamCreatedEvent(TeamCreatedEvent event);
-    void publishTeamMemberAddedEvent(TeamMemberAddedEvent event);
     
     // 편의 메서드들
     void publishUserSignedUp(String userId, String email, String ipAddress);

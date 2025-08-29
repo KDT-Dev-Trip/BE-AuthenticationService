@@ -13,6 +13,10 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 사용자 동기화 이벤트
+// 사용자 동기화 이벤트는 사용자 정보를 동기화할 때 발생하는 이벤트입니다.
+// 이벤트는 동기화 유형, 사용자 정보 목록, 타임스탬프 등의 정보를 포함합니다.
+
 public class UserSyncEvent {
     
     private String eventType; // "FULL_SYNC", "UPDATE", "DELETE"

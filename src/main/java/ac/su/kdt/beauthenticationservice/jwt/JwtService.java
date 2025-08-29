@@ -208,10 +208,24 @@ public class JwtService {
      */
     public Boolean isTokenValid(String token) {
         try {
-            extractAllClaims(token);
-            return !isTokenExpired(token);
+            log.info("JWT Validation - Starting token validation");
+            Claims claims = extractAllClaims(token);
+            log.info("JWT Validation - Token claims extracted successfully");
+            log.info("JWT Validation - Subject: {}", claims.getSubject());
+            log.info("JWT Validation - Email: {}", claims.get("email"));
+            log.info("JWT Validation - Role: {}", claims.get("role"));
+            log.info("JWT Validation - Expiration: {}", claims.getExpiration());
+            log.info("JWT Validation - Current time: {}", new Date());
+            
+            boolean expired = isTokenExpired(token);
+            log.info("JWT Validation - Token expired: {}", expired);
+            
+            return !expired;
         } catch (JwtException e) {
-            log.debug("Token validation failed: {}", e.getMessage());
+            log.error("JWT Validation - Token validation failed: {}", e.getMessage(), e);
+            return false;
+        } catch (Exception e) {
+            log.error("JWT Validation - Unexpected error: {}", e.getMessage(), e);
             return false;
         }
     }

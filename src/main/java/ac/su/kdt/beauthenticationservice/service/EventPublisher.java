@@ -5,8 +5,6 @@ import ac.su.kdt.beauthenticationservice.model.dto.LoginFailedEvent;
 import ac.su.kdt.beauthenticationservice.model.dto.PasswordChangedEvent;
 import ac.su.kdt.beauthenticationservice.model.dto.PasswordResetCompletedEvent;
 import ac.su.kdt.beauthenticationservice.model.dto.PasswordResetRequestedEvent;
-import ac.su.kdt.beauthenticationservice.model.dto.TeamCreatedEvent;
-import ac.su.kdt.beauthenticationservice.model.dto.TeamMemberAddedEvent;
 import ac.su.kdt.beauthenticationservice.model.dto.UserLoggedInEvent;
 import ac.su.kdt.beauthenticationservice.model.dto.UserLoggedOutEvent;
 import ac.su.kdt.beauthenticationservice.model.dto.UserSignedUpEvent;
@@ -32,10 +30,8 @@ public class EventPublisher implements EventPublisherInterface {
         this.kafkaTemplate = kafkaTemplate;
     }
     
-    // MSA 공유 Kafka 토픽명 - user 서비스와 통일
-    private static final String USER_SIGNED_UP_TOPIC = "auth-events";
-    private static final String USER_LOGGED_IN_TOPIC = "auth-events";
-    private static final String PASSWORD_RESET_REQUESTED_TOPIC = "auth-events";
+    // MSA 공유 Kafka 토픽명 - 모든 인증 이벤트는 단일 토픽 사용
+    private static final String AUTH_EVENTS_TOPIC = "auth-events";
     
     // 기존 토픽명 (호환성 유지용) - 필요시 주석 해제하여 dual publish 가능
     /*
@@ -47,7 +43,7 @@ public class EventPublisher implements EventPublisherInterface {
     public void publishUserSignedUpEvent(UserSignedUpEvent event) {
         try {
             CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(USER_SIGNED_UP_TOPIC, event.getUserId().toString(), event);
+                    kafkaTemplate.send(AUTH_EVENTS_TOPIC, event.getUserId().toString(), event);
             
             future.whenComplete((result, exception) -> {
                 if (exception != null) {
@@ -67,7 +63,7 @@ public class EventPublisher implements EventPublisherInterface {
     public void publishUserLoggedInEvent(UserLoggedInEvent event) {
         try {
             CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(USER_LOGGED_IN_TOPIC, event.getUserId(), event);
+                    kafkaTemplate.send(AUTH_EVENTS_TOPIC, event.getUserId(), event);
             
             future.whenComplete((result, exception) -> {
                 if (exception != null) {
@@ -87,7 +83,7 @@ public class EventPublisher implements EventPublisherInterface {
     public void publishPasswordResetRequestedEvent(PasswordResetRequestedEvent event) {
         try {
             CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(PASSWORD_RESET_REQUESTED_TOPIC, event.getUserId(), event);
+                    kafkaTemplate.send(AUTH_EVENTS_TOPIC, event.getUserId(), event);
             
             future.whenComplete((result, exception) -> {
                 if (exception != null) {
@@ -139,7 +135,7 @@ public class EventPublisher implements EventPublisherInterface {
     public void publishUserSyncEvent(UserSyncEvent event) {
         try {
             CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(USER_SIGNED_UP_TOPIC, "sync", event);
+                    kafkaTemplate.send(AUTH_EVENTS_TOPIC, "sync", event);
             
             future.whenComplete((result, exception) -> {
                 if (exception != null) {
@@ -160,7 +156,7 @@ public class EventPublisher implements EventPublisherInterface {
     public void publishUserLoggedOutEvent(UserLoggedOutEvent event) {
         try {
             CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(USER_SIGNED_UP_TOPIC, event.getAuthUserId(), event);
+                    kafkaTemplate.send(AUTH_EVENTS_TOPIC, event.getAuthUserId(), event);
             
             future.whenComplete((result, exception) -> {
                 if (exception != null) {
@@ -180,7 +176,7 @@ public class EventPublisher implements EventPublisherInterface {
     public void publishLoginFailedEvent(LoginFailedEvent event) {
         try {
             CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(USER_SIGNED_UP_TOPIC, event.getEmail(), event);
+                    kafkaTemplate.send(AUTH_EVENTS_TOPIC, event.getEmail(), event);
             
             future.whenComplete((result, exception) -> {
                 if (exception != null) {
@@ -200,7 +196,7 @@ public class EventPublisher implements EventPublisherInterface {
     public void publishAccountLockedEvent(AccountLockedEvent event) {
         try {
             CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(USER_SIGNED_UP_TOPIC, event.getAuthUserId(), event);
+                    kafkaTemplate.send(AUTH_EVENTS_TOPIC, event.getAuthUserId(), event);
             
             future.whenComplete((result, exception) -> {
                 if (exception != null) {
@@ -220,7 +216,7 @@ public class EventPublisher implements EventPublisherInterface {
     public void publishPasswordChangedEvent(PasswordChangedEvent event) {
         try {
             CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(USER_SIGNED_UP_TOPIC, event.getAuthUserId(), event);
+                    kafkaTemplate.send(AUTH_EVENTS_TOPIC, event.getAuthUserId(), event);
             
             future.whenComplete((result, exception) -> {
                 if (exception != null) {
@@ -240,7 +236,7 @@ public class EventPublisher implements EventPublisherInterface {
     public void publishPasswordResetCompletedEvent(PasswordResetCompletedEvent event) {
         try {
             CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(USER_SIGNED_UP_TOPIC, event.getAuthUserId(), event);
+                    kafkaTemplate.send(AUTH_EVENTS_TOPIC, event.getAuthUserId(), event);
             
             future.whenComplete((result, exception) -> {
                 if (exception != null) {
@@ -257,45 +253,6 @@ public class EventPublisher implements EventPublisherInterface {
         }
     }
     
-    public void publishTeamCreatedEvent(TeamCreatedEvent event) {
-        try {
-            CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(USER_SIGNED_UP_TOPIC, String.valueOf(event.getTeamId()), event);
-            
-            future.whenComplete((result, exception) -> {
-                if (exception != null) {
-                    log.error("Failed to publish TeamCreatedEvent for teamId: {}", 
-                             event.getTeamId(), exception);
-                } else {
-                    log.info("Successfully published TeamCreatedEvent for teamId: {}", 
-                             event.getTeamId());
-                }
-            });
-        } catch (Exception e) {
-            log.error("Error publishing TeamCreatedEvent for teamId: {}", 
-                     event.getTeamId(), e);
-        }
-    }
-    
-    public void publishTeamMemberAddedEvent(TeamMemberAddedEvent event) {
-        try {
-            CompletableFuture<SendResult<String, Object>> future = 
-                    kafkaTemplate.send(USER_SIGNED_UP_TOPIC, event.getAuthUserId(), event);
-            
-            future.whenComplete((result, exception) -> {
-                if (exception != null) {
-                    log.error("Failed to publish TeamMemberAddedEvent for userId: {}", 
-                             event.getAuthUserId(), exception);
-                } else {
-                    log.info("Successfully published TeamMemberAddedEvent for userId: {}", 
-                             event.getAuthUserId());
-                }
-            });
-        } catch (Exception e) {
-            log.error("Error publishing TeamMemberAddedEvent for userId: {}", 
-                     event.getAuthUserId(), e);
-        }
-    }
     
     // 범용 이벤트 발행 메서드
     public void publishEvent(String eventType, Object event) {

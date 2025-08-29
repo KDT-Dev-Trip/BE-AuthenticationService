@@ -12,6 +12,10 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 사용자 로그아웃 이벤트
+// 사용자 로그아웃 이벤트는 사용자가 로그아웃할 때 발생하는 이벤트입니다.
+// 이벤트는 로그아웃 시간, 로그아웃 방법, 로그아웃 IP 주소, 사용자 에이전트 등의 정보를 포함합니다.
+
 public class UserLoggedOutEvent {
     
     @JsonProperty("event_type")

@@ -11,6 +11,10 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 사용자 로그인 이벤트
+// 사용자 로그인 이벤트는 사용자가 로그인할 때 발생하는 이벤트입니다.
+// 이벤트는 로그인 시간, 로그인 방법, 로그인 IP 주소, 사용자 에이전트 등의 정보를 포함합니다.
+
 public class UserLoggedInEvent {
     
     private String userId;

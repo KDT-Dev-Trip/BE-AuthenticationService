@@ -78,12 +78,6 @@ public class User {
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
     
-    // 팀 관련 필드
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private Set<TeamMember> teamMemberships;
-    
-    @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private Set<Team> ownedTeams;
     
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

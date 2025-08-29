@@ -16,7 +16,7 @@ public class UserSignedUpEvent {
     
     @JsonProperty("event_type")
     @Builder.Default
-    private String eventType = "user.signed-up";
+    private String eventType = "auth.user-signed-up";
     
     @JsonProperty("event_id")
     private String eventId;

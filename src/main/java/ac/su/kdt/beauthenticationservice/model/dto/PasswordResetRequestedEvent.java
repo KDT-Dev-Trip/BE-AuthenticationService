@@ -11,6 +11,10 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 비밀번호 재설정 요청 이벤트
+// 비밀번호 재설정 요청 이벤트는 사용자가 비밀번호를 재설정할 때 발생하는 이벤트입니다.
+// 이벤트는 재설정 토큰, 요청 시간, 만료 시간 등의 정보를 포함합니다.
+
 public class PasswordResetRequestedEvent {
     
     private String userId;

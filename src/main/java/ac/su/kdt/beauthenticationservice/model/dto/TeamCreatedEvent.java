@@ -12,6 +12,10 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 팀 생성 이벤트
+// 팀 생성 이벤트는 사용자가 팀을 생성할 때 발생하는 이벤트입니다.
+// 이벤트는 팀 생성 시간, 생성자 정보, 팀 이름, 팀 설명 등의 정보를 포함합니다.
+
 public class TeamCreatedEvent {
     
     @JsonProperty("event_type")

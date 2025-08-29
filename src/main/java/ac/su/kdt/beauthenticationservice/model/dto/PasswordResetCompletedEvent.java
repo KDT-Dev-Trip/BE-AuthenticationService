@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 비밀번호 재설정 완료 이벤트
+// 비밀번호 재설정 완료 이벤트는 사용자가 비밀번호를 재설정할 때 발생하는 이벤트입니다.
+// 이벤트는 재설정된 비밀번호, 재설정 시간, 재설정 방법 등의 정보를 포함합니다.
 public class PasswordResetCompletedEvent {
     
     @JsonProperty("event_type")

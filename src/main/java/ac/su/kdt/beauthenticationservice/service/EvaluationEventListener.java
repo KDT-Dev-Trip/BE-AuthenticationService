@@ -12,6 +12,9 @@ public class EvaluationEventListener {
     
     /**
      * AI 평가 이벤트 처리 - 인증 서비스 관점
+     * AI 평가 이벤트는 AI 평가 시스템에서 발생하는 이벤트입니다.
+     * 이벤트는 평가 시작, 실패, 재시도 요청, 재시도 완료 등의 정보를 포함합니다.
+     * 이벤트는 평가 ID, 사용자 ID, 평가 유형, 평가 결과 등의 정보를 포함합니다.
      */
     @KafkaListener(topics = "evaluation-events", groupId = "auth-service-evaluation-group")
     public void handleEvaluationEvent(Map<String, Object> eventData) {

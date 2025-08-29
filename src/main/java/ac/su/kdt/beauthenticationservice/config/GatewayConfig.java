@@ -103,7 +103,48 @@ public class GatewayConfig {
             
             // HTTP API 라우팅 - MSA 서비스들로 프록시
             
-            // User Service 라우팅
+            // Gateway prefix를 통한 서비스 라우팅 (JWT 인증 필요)
+            .route("gateway-user-service", r -> r
+                .path("/gateway/user/**")
+                .filters(f -> f
+                    .stripPrefix(2)
+                    .addRequestHeader("X-Gateway-Route", "gateway-user-service")
+                    .addRequestHeader("X-Authenticated", "true")
+                )
+                .uri(userServiceUrl)
+            )
+            
+            .route("gateway-payment-service", r -> r
+                .path("/gateway/payment/**")
+                .filters(f -> f
+                    .stripPrefix(2)
+                    .addRequestHeader("X-Gateway-Route", "gateway-payment-service")
+                    .addRequestHeader("X-Authenticated", "true")
+                )
+                .uri(paymentServiceUrl)
+            )
+            
+            .route("gateway-mission-service", r -> r
+                .path("/gateway/mission/**")
+                .filters(f -> f
+                    .stripPrefix(2)
+                    .addRequestHeader("X-Gateway-Route", "gateway-mission-service")
+                    .addRequestHeader("X-Authenticated", "true")
+                )
+                .uri(missionServiceUrl)
+            )
+            
+            .route("gateway-ai-service", r -> r
+                .path("/gateway/ai/**")
+                .filters(f -> f
+                    .stripPrefix(2)
+                    .addRequestHeader("X-Gateway-Route", "gateway-ai-service")
+                    .addRequestHeader("X-Authenticated", "true")
+                )
+                .uri(aiServiceUrl)
+            )
+            
+            // User Service 라우팅 (인증 없이 접근 가능)
             .route("user-service", r -> r
                 .path("/user/**")
                 .filters(f -> f

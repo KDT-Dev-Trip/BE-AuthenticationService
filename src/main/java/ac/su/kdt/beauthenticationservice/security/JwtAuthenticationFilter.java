@@ -31,16 +31,26 @@ public class JwtAuthenticationFilter implements WebFilter {
     
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+        String path = exchange.getRequest().getPath().value();
+        String method = exchange.getRequest().getMethod().toString();
+        log.info("JWT Filter - Processing {} {} request", method, path);
+        
         try {
             String token = extractTokenFromRequest(exchange);
             
             if (token != null) {
-                return authenticateWithJwt(exchange, token)
-                    .then(chain.filter(exchange));
+                log.info("JWT Filter - Token found for {} {}", method, path);
+                return authenticateWithJwt(exchange, chain, token)
+                    .doOnError(e -> log.error("JWT Filter - Authentication failed for {} {}: {}", method, path, e.getMessage()))
+                    .onErrorResume(e -> {
+                        log.error("JWT Filter - Authentication error for {} {}, continuing without auth: {}", method, path, e.getMessage());
+                        return chain.filter(exchange);
+                    });
+            } else {
+                log.info("JWT Filter - No token found for {} {}", method, path);
             }
         } catch (Exception e) {
-            log.error("JWT authentication failed: {}", e.getMessage());
-            // 인증 실패 시에도 필터 체인을 계속 진행 (Spring Security가 처리)
+            log.error("JWT Filter - Exception for {} {}: {}", method, path, e.getMessage());
         }
         
         return chain.filter(exchange);
@@ -66,23 +76,30 @@ public class JwtAuthenticationFilter implements WebFilter {
     /**
      * JWT 토큰을 사용하여 Spring Security 인증을 설정합니다.
      */
-    private Mono<Void> authenticateWithJwt(ServerWebExchange exchange, String token) {
+    private Mono<Void> authenticateWithJwt(ServerWebExchange exchange, WebFilterChain chain, String token) {
         try {
+            log.debug("Attempting to authenticate JWT token");
+            
             // 테스트 토큰 처리
             if (token.startsWith("test-token-")) {
-                return authenticateTestToken(exchange, token);
+                log.debug("Processing test token");
+                return authenticateTestToken(exchange, chain, token);
             }
             
             // JWT 토큰 유효성 검증
+            log.debug("Validating JWT token");
             if (!jwtService.isTokenValid(token)) {
                 log.warn("Invalid JWT token provided");
                 return Mono.error(new RuntimeException("Invalid JWT token"));
             }
+            log.debug("JWT token is valid");
             
             // JWT에서 사용자 정보 추출
             String userId = jwtService.extractUserId(token);
             String email = jwtService.extractEmail(token);
             String role = jwtService.extractRole(token);
+            
+            log.debug("Extracted user info - userId: {}, email: {}, role: {}", userId, email, role);
             
             // Spring Security 인증 객체 생성
             List<SimpleGrantedAuthority> authorities = List.of(
@@ -98,12 +115,17 @@ public class JwtAuthenticationFilter implements WebFilter {
             
             log.debug("Successfully authenticated user: {} ({})", email, userId);
             
-            return ReactiveSecurityContextHolder.getContext()
-                .doOnNext(context -> context.setAuthentication(authToken))
-                .then();
+            return chain.filter(exchange.mutate()
+                .request(exchange.getRequest().mutate()
+                    .header("X-User-Id", userId)
+                    .header("X-User-Email", email)
+                    .header("X-User-Role", role)
+                    .build())
+                .build())
+                .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authToken));
             
         } catch (Exception e) {
-            log.error("JWT verification failed: {}", e.getMessage());
+            log.error("JWT verification failed: {}", e.getMessage(), e);
             return Mono.error(e);
         }
     }
@@ -111,7 +133,7 @@ public class JwtAuthenticationFilter implements WebFilter {
     /**
      * 테스트용 토큰 인증 처리
      */
-    private Mono<Void> authenticateTestToken(ServerWebExchange exchange, String testToken) {
+    private Mono<Void> authenticateTestToken(ServerWebExchange exchange, WebFilterChain chain, String testToken) {
         String userId = testToken.replace("test-token-", "");
         
         UsernamePasswordAuthenticationToken authToken = 
@@ -123,9 +145,14 @@ public class JwtAuthenticationFilter implements WebFilter {
         
         log.debug("Successfully authenticated test user: {}", userId);
         
-        return ReactiveSecurityContextHolder.getContext()
-            .doOnNext(context -> context.setAuthentication(authToken))
-            .then();
+        return chain.filter(exchange.mutate()
+            .request(exchange.getRequest().mutate()
+                .header("X-User-Id", userId)
+                .header("X-User-Email", "test-user@example.com")
+                .header("X-User-Role", "USER")
+                .build())
+            .build())
+            .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authToken));
     }
     
     /**

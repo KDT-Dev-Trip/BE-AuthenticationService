@@ -12,6 +12,10 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 계정 잠금 이벤트
+// 계정 잠금 이벤트는 사용자가 여러 번 실패한 로그인 시도 후 계정이 잠금될 때 발생하는 이벤트입니다.
+// 이벤트는 계정 잠금 시간, 잠금 이유, 잠금 해제 시간 등의 정보를 포함합니다.
+
 public class AccountLockedEvent {
     
     @JsonProperty("event_type")

@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+// 로그인 실패 이벤트
+// 로그인 실패 이벤트는 사용자가 로그인 시도 시 실패할 때 발생하는 이벤트입니다.
+// 이벤트는 실패한 이유, 실패 시간, 실패 횟수 등의 정보를 포함합니다.
 public class LoginFailedEvent {
     
     @JsonProperty("event_type")

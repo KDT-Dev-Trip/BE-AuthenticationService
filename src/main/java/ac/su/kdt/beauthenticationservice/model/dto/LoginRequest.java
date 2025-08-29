@@ -6,7 +6,9 @@ import lombok.Data;
 
 /**
  * 이메일 로그인 요청 DTO
+ * 이메일 로그인 요청 DTO는 사용자가 이메일과 비밀번호를 입력하여 로그인을 시도할 때 사용됩니다.
  */
+
 @Data
 public class LoginRequest {
     

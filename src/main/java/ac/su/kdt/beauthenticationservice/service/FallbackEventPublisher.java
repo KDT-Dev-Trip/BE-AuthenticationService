@@ -120,23 +120,6 @@ public class FallbackEventPublisher implements EventPublisherInterface {
         log.info("================================================");
     }
 
-    @Override
-    public void publishTeamCreatedEvent(TeamCreatedEvent event) {
-        log.info("=== TEAM CREATED EVENT (No Kafka) ===");
-        log.info("Team ID: {}", event.getTeamId());
-        log.info("Team Name: {}", event.getTeamName());
-        log.info("Creator: {}", event.getCreatorAuthUserId());
-        log.info("=====================================");
-    }
-
-    @Override
-    public void publishTeamMemberAddedEvent(TeamMemberAddedEvent event) {
-        log.info("=== TEAM MEMBER ADDED EVENT (No Kafka) ===");
-        log.info("Team ID: {}", event.getTeamId());
-        log.info("User ID: {}", event.getAuthUserId());
-        log.info("Member Role: {}", event.getMemberRole());
-        log.info("==========================================");
-    }
 
     public void publishUserSyncEvent(UserSyncEvent event) {
         log.info("=== USER SYNC EVENT (No Kafka) ===");

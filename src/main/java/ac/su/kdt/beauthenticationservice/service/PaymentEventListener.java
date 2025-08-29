@@ -11,6 +11,9 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+// 결제 이벤트 처리 - 인증 서비스 관점
+// 결제 이벤트는 결제 시스템에서 발생하는 이벤트입니다.
+// 이벤트는 결제 실패, 결제 변경, 잔액 부족 등의 정보를 포함합니다.
 public class PaymentEventListener {
     
     private final AuthSecurityService authSecurityService;
