@@ -1,5 +1,6 @@
 package ac.su.kdt.beauthenticationservice.controller;
 
+import ac.su.kdt.beauthenticationservice.client.UserManagementServiceClient;
 import ac.su.kdt.beauthenticationservice.model.entity.User;
 import ac.su.kdt.beauthenticationservice.service.AuthService;
 import ac.su.kdt.beauthenticationservice.service.RedisLoginAttemptService;
@@ -34,6 +35,8 @@ public class AuthController {
     private final AuthService authService;
     private final RedisLoginAttemptService redisLoginAttemptService;
     private final JwtService jwtService;
+    // TODO: MSA 통합 - User Management Service 클라이언트 추가
+    private final UserManagementServiceClient userManagementServiceClient;
     
     @GetMapping("/test")
     @Operation(summary = "Authentication Service Test", description = "인증 서비스 동작 확인 및 사용 가능한 엔드포인트 조회")
@@ -159,8 +162,40 @@ public class AuthController {
             
             User user = loginResult.getUser();
             
-            // JWT 토큰 생성
-            String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), user.getRole().toString());
+            // TODO: MSA 통합 - User Management Service에서 실제 User ID (Long) 조회
+            Long realUserId = null;
+            try {
+                // 먼저 기존 사용자 ID 조회 시도
+                realUserId = userManagementServiceClient.getUserIdByAuthUserId(user.getId());
+                
+                // 사용자가 User Management Service에 없으면 생성/동기화
+                if (realUserId == null) {
+                    log.info("User not found in User Management Service, creating/syncing: authUserId={}", user.getId());
+                    realUserId = userManagementServiceClient.createOrSyncUser(
+                        user.getId(), 
+                        user.getEmail(), 
+                        user.getName(), 
+                        user.getRole().toString()
+                    );
+                }
+            } catch (Exception e) {
+                log.error("Failed to get/create user in User Management Service for authUserId: {}", user.getId(), e);
+                // User Management Service 호출 실패 시 fallback으로 기본 JWT 토큰 생성
+            }
+            
+            // JWT 토큰 생성 - 실제 User ID 포함
+            String accessToken;
+            if (realUserId != null) {
+                accessToken = jwtService.generateAccessTokenWithRealUserId(
+                    user.getId(), realUserId, user.getEmail(), user.getRole().toString());
+                log.info("JWT 토큰 생성 완료 - authUserId: {}, realUserId: {}", user.getId(), realUserId);
+            } else {
+                // Fallback: 기존 방식으로 토큰 생성 (주석 처리된 기존 코드)
+                // accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), user.getRole().toString());
+                accessToken = jwtService.generateAccessTokenWithRealUserId(
+                    user.getId(), null, user.getEmail(), user.getRole().toString());
+                log.warn("User Management Service 연결 실패로 realUserId 없이 JWT 토큰 생성: authUserId={}", user.getId());
+            }
             String refreshToken = jwtService.generateRefreshToken(user.getId());
             
             // 로그인 성공 기록

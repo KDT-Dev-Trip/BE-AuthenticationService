@@ -80,17 +80,24 @@ public class JwtGlobalFilter implements GlobalFilter, Ordered {
             }
 
             // 📋 4단계: JWT에서 사용자 정보 추출
-            String userId = jwtService.extractUserId(token);
+            String authUserId = jwtService.extractUserId(token); // Auth Service의 사용자 ID (UUID)
             String email = jwtService.extractEmail(token);
             String role = jwtService.extractRole(token);
-
-            log.info("✅ JWT GlobalFilter - Authentication successful for {} {} - User: {}, Email: {}, Role: {}",
-                    method, path, userId, email, role);
+            
+            // TODO: MSA 통합 - JWT에서 실제 User ID (Long) 추출
+            Long realUserId = jwtService.extractRealUserId(token);
+            
+            log.info("✅ JWT GlobalFilter - Authentication successful for {} {} - AuthUser: {}, RealUser: {}, Email: {}, Role: {}",
+                    method, path, authUserId, realUserId, email, role);
 
             // 📋 5단계: 사용자 정보를 헤더에 추가하여 Target Service로 전달
+            // 기존 X-User-Id 헤더는 주석 처리하고 새로운 헤더 구조 사용
             ServerWebExchange modifiedExchange = exchange.mutate()
                     .request(request.mutate()
-                            .header("X-User-Id", userId)
+                            // TODO: MSA 통합 - 실제 User ID (Long)를 X-User-Id로 전달
+                            .header("X-User-Id", realUserId != null ? realUserId.toString() : authUserId)
+                            // .header("X-User-Id", authUserId) // 기존 코드 주석 처리
+                            .header("X-Auth-User-Id", authUserId) // Auth Service의 UUID는 별도 헤더로 전달
                             .header("X-User-Email", email)
                             .header("X-User-Role", role)
                             .header("X-Gateway-Auth", "true")

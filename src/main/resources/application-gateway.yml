@@ -2,9 +2,6 @@ spring:
   application:
     name: api-gateway
   
-  profiles:
-    active: gateway
-  
   # Gateway 모드에서는 H2 인메모리 DB 사용 (기본 스키마만 생성)
   datasource:
     url: jdbc:h2:mem:gateway;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE

@@ -1,5 +1,6 @@
 package ac.su.kdt.beauthenticationservice.service;
 
+import ac.su.kdt.beauthenticationservice.client.UserManagementServiceClient;
 import ac.su.kdt.beauthenticationservice.jwt.JwtService;
 import ac.su.kdt.beauthenticationservice.model.dto.*;
 import ac.su.kdt.beauthenticationservice.model.entity.User;
@@ -33,6 +34,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final Optional<EventPublisher> eventPublisher;
     private final MeterRegistry meterRegistry;
+    // TODO: MSA 통합 - User Management Service 클라이언트 추가
+    private final UserManagementServiceClient userManagementServiceClient;
     
     // Metrics
     private final Counter signupSuccessCounter;
@@ -42,12 +45,14 @@ public class AuthService {
     
     public AuthService(UserRepository userRepository, JwtService jwtService, 
                       PasswordEncoder passwordEncoder, Optional<EventPublisher> eventPublisher, 
-                      MeterRegistry meterRegistry) {
+                      MeterRegistry meterRegistry, UserManagementServiceClient userManagementServiceClient) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
         this.meterRegistry = meterRegistry;
+        // TODO: MSA 통합 - User Management Service 클라이언트 초기화
+        this.userManagementServiceClient = userManagementServiceClient;
         
         // Initialize metrics
         this.signupSuccessCounter = Counter.builder("signup_success_count")
@@ -89,7 +94,7 @@ public class AuthService {
                 .role(User.UserRole.USER)
                 .isActive(true)
                 .emailVerified(false) // 이메일 인증 필요
-                .currentTickets(100) // 신규 사용자 초기 티켓
+                .currentTickets(3) // 신규 사용자 환영 티켓 3개
                 .build();
         
         user = userRepository.save(user);

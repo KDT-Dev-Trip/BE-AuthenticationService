@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -39,6 +40,19 @@ public class JwtService {
      */
     public String generateAccessToken(String userId, String email, String role) {
         return generateAccessToken(email, userId, role, null);
+    }
+    
+    /**
+     * MSA 통합용 Access Token 생성 - 실제 User ID (Long) 포함
+     */
+    public String generateAccessTokenWithRealUserId(String authUserId, Long realUserId, String email, String role) {
+        Map<String, Object> additionalClaims = new HashMap<>();
+        // TODO: MSA 통합 - 실제 User Management Service의 User ID 포함
+        if (realUserId != null) {
+            additionalClaims.put("real_user_id", realUserId);
+            log.info("JWT Token에 실제 User ID 포함: authUserId={}, realUserId={}", authUserId, realUserId);
+        }
+        return generateAccessToken(email, authUserId, role, additionalClaims);
     }
     
     /**
@@ -148,6 +162,19 @@ public class JwtService {
      */
     public String extractRole(String token) {
         return extractClaim(token, claims -> claims.get("role", String.class));
+    }
+    
+    /**
+     * MSA 통합용 - 토큰에서 실제 User ID (Long) 추출
+     */
+    public Long extractRealUserId(String token) {
+        return extractClaim(token, claims -> {
+            Object realUserId = claims.get("real_user_id");
+            if (realUserId instanceof Number) {
+                return ((Number) realUserId).longValue();
+            }
+            return null;
+        });
     }
     
     /**
