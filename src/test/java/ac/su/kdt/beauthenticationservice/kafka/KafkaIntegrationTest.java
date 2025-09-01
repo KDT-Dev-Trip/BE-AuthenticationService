@@ -66,7 +66,8 @@ class KafkaIntegrationTest extends IntegrationTestBase {
         testConsumer.subscribe(Collections.singletonList(topic));
         
         UserSignedUpEvent event = UserSignedUpEvent.builder()
-                .userId("test-user-123")
+                .userId(123L)
+                .authUserId("test-user-123")
                 .email("test@example.com")
                 .name("Test User")
                 .planType("FREE")
@@ -75,7 +76,7 @@ class KafkaIntegrationTest extends IntegrationTestBase {
                 .build();
         
         // When
-        kafkaTemplate.send(topic, event.getUserId(), event).get();
+        kafkaTemplate.send(topic, String.valueOf(event.getUserId()), event).get();
         
         // Then
         ConsumerRecords<String, Object> records = testConsumer.poll(Duration.ofSeconds(10));
@@ -83,11 +84,11 @@ class KafkaIntegrationTest extends IntegrationTestBase {
         
         ConsumerRecord<String, Object> record = records.iterator().next();
         assertThat(record.topic()).isEqualTo(topic);
-        assertThat(record.key()).isEqualTo("test-user-123");
+        assertThat(record.key()).isEqualTo("123");
         
         // JSON 변환 검증
         Map<String, Object> recordValue = (Map<String, Object>) record.value();
-        assertThat(recordValue.get("userId")).isEqualTo("test-user-123");
+        assertThat(recordValue.get("userId")).isEqualTo(123L);
         assertThat(recordValue.get("email")).isEqualTo("test@example.com");
         assertThat(recordValue.get("planType")).isEqualTo("FREE");
         assertThat(recordValue.get("source")).isEqualTo("AUTH0_SOCIAL");
@@ -173,7 +174,8 @@ class KafkaIntegrationTest extends IntegrationTestBase {
         testConsumer.subscribe(topics);
         
         UserSignedUpEvent signupEvent = UserSignedUpEvent.builder()
-                .userId("user-1")
+                .userId(1L)
+                .authUserId("user-1")
                 .email("user1@example.com")
                 .name("User 1")
                 .planType("FREE")
@@ -197,9 +199,9 @@ class KafkaIntegrationTest extends IntegrationTestBase {
                 .build();
         
         // When
-        kafkaTemplate.send("user.signed-up", "user-1", signupEvent).get();
-        kafkaTemplate.send("user.logged-in", "user-2", loginEvent).get();
-        kafkaTemplate.send("user.password-reset-requested", "user-3", resetEvent).get();
+        kafkaTemplate.send("user.signed-up", String.valueOf(signupEvent.getUserId()), signupEvent).get();
+        kafkaTemplate.send("user.logged-in", loginEvent.getUserId(), loginEvent).get();
+        kafkaTemplate.send("user.password-reset-requested", resetEvent.getUserId(), resetEvent).get();
         
         // Then
         ConsumerRecords<String, Object> records = testConsumer.poll(Duration.ofSeconds(15));
@@ -218,7 +220,7 @@ class KafkaIntegrationTest extends IntegrationTestBase {
             "user.logged-in", 
             "user.password-reset-requested"
         );
-        assertThat(receivedUserIds).containsExactlyInAnyOrder("user-1", "user-2", "user-3");
+        assertThat(receivedUserIds).containsExactlyInAnyOrder("123", "user-2", "user-3");
     }
     
     @Test

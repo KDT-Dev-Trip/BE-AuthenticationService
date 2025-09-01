@@ -52,7 +52,8 @@ class EventPublisherTest {
     void publishUserSignedUpEvent_ShouldSendEventSuccessfully() {
         // Given
         UserSignedUpEvent event = UserSignedUpEvent.builder()
-                .userId("user-123")
+                .userId(123L)
+                .authUserId("user-123")
                 .email("test@example.com")
                 .name("Test User")
                 .planType("FREE")
@@ -133,7 +134,8 @@ class EventPublisherTest {
     void publishEvent_WhenKafkaFails_ShouldNotThrowException() {
         // Given
         UserSignedUpEvent event = UserSignedUpEvent.builder()
-                .userId("user-123")
+                .userId(123L)
+                .authUserId("user-123")
                 .email("test@example.com")
                 .build();
         

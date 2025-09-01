@@ -1,5 +1,6 @@
 package ac.su.kdt.beauthenticationservice.service;
 
+import ac.su.kdt.beauthenticationservice.client.UserManagementServiceClient;
 import ac.su.kdt.beauthenticationservice.jwt.JwtService;
 import ac.su.kdt.beauthenticationservice.model.entity.User;
 import ac.su.kdt.beauthenticationservice.repository.UserRepository;
@@ -42,6 +43,9 @@ class AuthServiceTest {
     @Mock
     private EmailService emailService;
     
+    @Mock
+    private UserManagementServiceClient userManagementServiceClient;
+    
     @Captor
     private ArgumentCaptor<User> userCaptor;
     
@@ -58,7 +62,8 @@ class AuthServiceTest {
                 jwtService,
                 passwordEncoder,
                 Optional.of(eventPublisher),
-                meterRegistry
+                meterRegistry,
+                userManagementServiceClient
         );
     }
     
